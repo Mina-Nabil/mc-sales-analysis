@@ -1,0 +1,32 @@
+# Binaries
+/bin/
+*.exe
+/server
+
+# Env / secrets
+.env
+*.local
+
+# Uploaded feed files (runtime)
+/uploads/
+
+# Node
+/web/node_modules/
+
+# Go
+/vendor/
+
+# OS
+.DS_Store
+
+# Large source data (kept out of git; loaded from disk at migrate time)
+*.xlsx
+*.zip
+mainsource/
+phase0/
+
+# but keep the seed CSVs — they ARE the seed state
+!seed/*.csv
+
+# theme template
+theme-template/

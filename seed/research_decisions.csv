@@ -1,0 +1,45 @@
+﻿action,from_name,to_name,volume
+model merged (researched),Hyundai Elantra AD,Hyundai Elantra,14518
+model merged (researched),Hyundai Accent RB,Hyundai Accent,10133
+model merged (researched),Hyundai Elantra HD,Hyundai Elantra,3851
+model merged,DFSK GLORY,DFSK Glory,2644
+model re-cased,Renault AUSTRAL,Renault Austral,2272
+alias corrected,Kia k3,Cerato -> K3,1723
+model re-cased,GAC EMZOOM,GAC Emzoom,1130
+model re-cased,GAC EMPOW,GAC Empow,1030
+brand merged (researched),Ssangyong,KGM,993
+model merged,Volkswagen TAYRON,Volkswagen Tayron,566
+model merged,DFSK EAGLE,DFSK Eagle,508
+model merged,Chery Tiggo4 PRO,Chery Tiggo4 Pro,453
+model merged (researched),Toyota Landr Cruiser,Toyota Land Cruiser,323
+model merged,BMW I3,BMW i3,306
+model re-cased,GAC EMKOO,GAC Emkoo,248
+model re-cased,Shacman SHACMAN,Shacman Shacman,192
+model re-cased,KGM ACTYON,KGM Actyon,150
+model re-cased,Iveco TRUCK,Iveco Truck,97
+model re-cased,King Long GLONG,King Long Glong,68
+model re-cased,Sany TRUCK,Sany Truck,59
+model merged,Tata XENON,Tata Xenon,49
+model re-cased,Rolls Royce CULLINAN,Rolls Royce Cullinan,48
+model re-cased,Lamborghini HURACAN,Lamborghini Huracan,22
+model re-cased,GAC GONOW,GAC Gonow,15
+model re-cased,Wuling YANGGUANG,Wuling Yangguang,12
+model re-cased,Vedecar VEDECAR,Vedecar Vedecar,8
+model merged,Audi Q5E-TRON,Audi Q5e-tron,8
+model re-cased,UD QUESTER,UD Quester,8
+model re-cased,Lexus LXVIP,Lexus Lxvip,7
+model re-cased,Ferari PUROSANGUE,Ferari Purosangue,5
+model re-cased,UD CRONER,UD Croner,4
+model merged,Hongqi HS3,Hongqi hs3,3
+model re-cased,Tesla CYBERTRUCK,Tesla Cybertruck,3
+model re-cased,Astra ASTRA,Astra Astra,3
+model re-cased,Rolls Royce WRAITH,Rolls Royce Wraith,2
+model re-cased,Xpeng XPENG,Xpeng Xpeng,1
+model re-cased,Forland FORLAND,Forland Forland,1
+model re-cased,Chevrolet TRUCK,Chevrolet Truck,1
+model re-cased,Jiangsu HUAZI,Jiangsu Huazi,1
+model re-cased,JIDU JIYUE,JIDU Jiyue,1
+model re-cased,Sinogold JUNXING,Sinogold Junxing,1
+model re-cased,Kia BONGO,Kia Bongo,1
+model re-cased,Changan QIYUAN,Changan Qiyuan,1
+model re-cased,Toyota HAICE,Toyota Haice,1

@@ -1,0 +1,316 @@
+﻿norm_key,brand,volume,n_spellings,raw_spellings,status
+شيفروليه,Chevrolet,136590,1,شيفروليه,confirmed
+نيسان,Nissan,92274,1,نيسان,confirmed
+هيونداي,Hyundai,79973,1,هيونداى,confirmed
+شيري,Chery,78253,1,شيرى,confirmed
+امجي,MG,70118,1,ام جـى,confirmed
+تويوتا,Toyota,58759,1,تويوتا,confirmed
+كيا,KIA,53753,1,كيــا,confirmed
+سوزوكي,Suzuki,48565,1,سوزوكى,confirmed
+مرسيدس,Mercedes,45697,1,مرسيدس,confirmed
+سكودا,Skoda,32397,1,سكــودا,confirmed
+رينو,Renault,27796,2,رينـو | رينو,confirmed
+بيجو,Peugeot,25303,2,بيجـو | بيجو,confirmed
+فيات,FIAT,25080,1,فيات,confirmed
+byd,BYD,24776,1,BYD,confirmed
+متسوبيشي,Mitsubishi,22051,1,متسوبيشى,confirmed
+جيتور,Jetour,20547,1,جيتور,confirmed
+فولكسفاجن,Volkswagen,16045,1,فولكس فاجن,confirmed
+سيات,SEAT,15729,1,سيات,confirmed
+ستروين,Citroen,15048,1,ستــــروين,confirmed
+اوبل,OPEL,13954,1,اوبـل,confirmed
+بيامدبليو,BMW,12288,1,بى ام دبليو,confirmed
+كينجلونج,King Long,11606,1,كينج لونج,confirmed
+جولدن,GoldenDragon,10057,1,جولدن,confirmed
+جيلي,Geely,9371,1,جيلى,confirmed
+اودي,AUDI,9312,2,اودى | اودي,confirmed
+ايسوزو,Isuzu,7330,1,ايسـوزو,confirmed
+جاك,JAC,6495,1,جاك,confirmed
+بايك,BAIC,6119,1,بايك,confirmed
+اباظه,Abaza,5956,1,اباظـــه,confirmed
+soueast,Soueast,5787,1,SOUEAST,confirmed
+شانجان,Changan,5700,2,شانجان | شان جان,confirmed
+فولكسواجن,Volkswagen,4999,1,فولكس واجن,confirmed
+لادا,LADA,4728,1,لادا,confirmed
+هوندا,Honda,4642,1,هوندا,confirmed
+كوبرا,Cubra,4435,1,كوبرا,confirmed
+رانجروفر,Land Rover,3897,1,رانج روفر,confirmed
+هافال,Haval,3885,1,هافال,confirmed
+جيب,JEEP,3730,2,جيــب | جيب,confirmed
+dfsk,DFSK,3673,1,DFSK,confirmed
+شنجان,Changan,3548,1,شنجان,confirmed
+بروتون,Proton,3509,1,بروتون,confirmed
+فولفو,Volvo,3295,1,فولفو,confirmed
+سوبارو,Subaru,2965,1,سوبارو,confirmed
+فورد,FORD,2805,1,فورد,confirmed
+gac,GAC,2790,1,GAC,confirmed
+سانجيونج,KGM,2672,1,سانج يونج,confirmed
+فوتون,Foton,2256,1,فوتون,confirmed
+بورش,Porche,2082,1,بورش,confirmed
+jmc,JMC,1852,1,JMC,confirmed
+mg,MG,1791,1,MG,confirmed
+haval,Haval,1757,1,HAVAL,confirmed
+baic,BAIC,1721,1,baic,confirmed
+kgm,KGM,1686,1,KGM,confirmed
+ds,DS,1381,1,DS,confirmed
+جيامسي,GMC,1240,1,جى ام سى,confirmed
+zemexstar,Zemex,1012,1,ZEMEX STAR,confirmed
+shineray,Shineray,961,1,SHINERAY,confirmed
+شينراي,Shineray,923,1,شينراي,confirmed
+الفاروميو,Alfa Romeo,906,1,الفاروميو,confirmed
+dongfeng,Dongfeng,787,1,DONG FENG,confirmed
+zeekr,Zeekr,720,1,zeekr,confirmed
+جنبي,Brilliance,718,1,جن بى,confirmed
+kaiyi,Kaiyi,710,1,KAIYI,confirmed
+زيمكس,Zemex,702,1,زيمكس,confirmed
+مينيكوبر,Mini Coper,689,1,مينى كوبر,confirmed
+rox,ROX,642,1,ROX,confirmed
+gmc,GMC,599,1,GMC,confirmed
+kyc,KYC,595,1,KYC,confirmed
+xpeng,Xpeng,574,1,XPENG,confirmed
+kycauto,KYC,561,2,KYC AUTO | kycauto,confirmed
+فاو,Bestune,540,1,فاو,confirmed
+ميتسوبيشي,Mitsubishi,488,1,ميتسوبيشى,confirmed
+exeed,Exeed,482,1,EXEED,confirmed
+forthing,Forthing,478,1,forthing,confirmed
+بريليانس,Brilliance,452,1,بريليانس,confirmed
+deepal,Deepal,429,1,deepal,confirmed
+jac,JAC,428,1,JAC,confirmed
+جاجوار,Jaguar,412,1,جاجوار,confirmed
+تسلا,Tesla,411,1,تسلا,confirmed
+يوتنج,Yutong,344,1,يوتنج,confirmed
+جويلونج,Joylong,329,1,جوي لونج,confirmed
+avatar,Avatr,319,1,avatar,confirmed
+جلوري,DFSK,315,2,جلورى | جلوري,confirmed
+سوكون,DFSK,292,1,سوكــون,confirmed
+بنتلي,Bentley,284,1,بنتلـى,confirmed
+شنري,Shineray,269,1,شنرى,confirmed
+سكانيا,Skania,258,1,سكانيا,confirmed
+zemex,Zemex,256,1,ZEMEX,confirmed
+جيوشي,Gyushi,255,1,جيوشي,confirmed
+hamco,Hamco,242,1,hamco,confirmed
+avatr,Avatr,239,1,AVATR,confirmed
+sou-east,Soueast,233,1,SOU-EAST,confirmed
+شانجي,Changhe,223,2,شانجي | شانجى,confirmed
+m.c.v,MCV,221,1,M.C.V,confirmed
+افيكو,Iveco,204,1,افيكـــو,confirmed
+مازدا,Mazda,189,1,مـازدا,confirmed
+shacman,Shacman,189,1,SHACMAN,confirmed
+مان,MAN,188,2,مــان | مان,confirmed
+ساندستورم,Sandstorm,186,1,ساند ستورم,confirmed
+ميني,Mini Coper,179,1,مينـى,confirmed
+vgv,VGV,175,1,VGV,confirmed
+greatwall,GWM,170,1,great wall,confirmed
+im,IM,166,1,IM,confirmed
+dayun,Dayun,165,1,DAYUN,confirmed
+aeolusdfm,Dongfeng,157,1,aeolus dfm,confirmed
+لينكاندكو,Lynk &amp; Co,151,1,لينك اند كو,confirmed
+جريتوول,GWM,146,1,جريت وول,confirmed
+بجاج,Bagage,142,1,بجاج,confirmed
+دايو,Daewoo,137,1,دايو,confirmed
+txlevc,LEVC,137,1,TX LEVC,confirmed
+تاتا,TATA,129,2,تاتا | تـاتــا,confirmed
+غبور,GB,124,1,غبـــور,confirmed
+victory,Victory,123,1,VICTORY,confirmed
+joylong,Joylong,120,2,JOYLONG | joylong,confirmed
+كاديلاك,Cadillac,120,1,كاديـلاك,confirmed
+xiaomi,Xiaomi,116,1,XIAOMI,confirmed
+هافالجولينو,Haval,115,1,هافال جولينو,confirmed
+فهد,FAHD,111,1,فهد,confirmed
+فولكس,Volkswagen,110,1,فولكس,confirmed
+sany,SANY,107,1,SANY,confirmed
+lynk&amp;co,Lynk &amp; Co,101,2,LYNK &amp; CO | LYNK&amp;CO,confirmed
+سمارت,Smart,100,1,سمارت,confirmed
+سوايست,Soueast,95,2,سوايست | سوإيست,confirmed
+مازيراتي,Mazarati,94,1,مازيراتى,confirmed
+لامبرجيني,Lamborghini,88,1,لامبرجينى,confirmed
+jinbei,Brilliance,86,1,JINBEI,confirmed
+ايفكو,Iveco,85,1,ايفكو,confirmed
+جريتاوتو,Great Auto,83,1,جريت أوتو,confirmed
+مازارتي,Mazarati,83,1,مازارتى,confirmed
+لاندروفر,Land Rover,82,1,لاندروفر,confirmed
+prince,DFSK,76,1,PRINCE,confirmed
+dfm,Dongfeng,76,1,dfm,confirmed
+رولزرويس,Rolls Royce,75,1,رولزرويس,confirmed
+faw,Bestune,70,1,FAW,confirmed
+فيراري,Ferari,65,1,فيرارى,confirmed
+liauto,Li Auto,65,1,Li auto,confirmed
+دونجفنج,Dongfeng,63,1,دونج فنج,confirmed
+تاكسيلندن,LondonCap,58,1,تاكسي لندن,confirmed
+yutong,Yutong,57,1,YUTONG,confirmed
+لوتس,Lotus,54,1,لوتس,confirmed
+man,MAN,54,1,MAN,confirmed
+beiben,BEI BEN,52,1,BEI BEN,confirmed
+tata,TATA,52,1,Tata,confirmed
+kinglong,King Long,50,1,KING LONG,confirmed
+استرا,OPEL,46,1,استـــرا,confirmed
+فيكتوري,Victory,46,2,فيكتورى | فيكتوري,confirmed
+sinotruk,Sinotruk,46,1,Sinotruk,confirmed
+neta,NETA,43,1,neta,confirmed
+دودج,Dodge,38,1,دودج,confirmed
+سيتروين,Citroen,38,1,سيتروين,confirmed
+اودی,AUDI,38,1,اودی,confirmed
+ايكولاين,Ecoline,36,1,ايكولاين,confirmed
+باجاج,Bagage,35,1,باجاج,confirmed
+jetour,Jetour,34,1,jetour,confirmed
+كوبر,Cubra,32,1,كوبـر,confirmed
+استونمارتين,Aston Martin,32,1,استون مارتين,confirmed
+genesis,Genesis,32,1,genesis,confirmed
+زوتي,Zoyte,31,2,زوتي | زوتى,confirmed
+ليكزس,Lexus,31,1,ليكزس,confirmed
+chana,Changan,30,1,chana,confirmed
+wuling,Wuling,30,1,WULING,confirmed
+kastour,MAN,28,1,KASTOUR,confirmed
+ولينج,Wuling,28,1,ولينج,confirmed
+haice,Toyota,26,1,HAICE,confirmed
+ايفيكو,Iveco,24,1,ايفيكو,confirmed
+هونشي,Hongqi,23,1,هونشي,confirmed
+ليفان,Levan,23,1,ليفان,confirmed
+bestune,Bestune,21,1,bestune,confirmed
+جريتويل,GWM,20,1,جريت ويل,confirmed
+eagle,DFSK,19,1,Eagle,confirmed
+df,DFM,18,1,df,confirmed
+changhe,Changan,16,1,CHANGHE,confirmed
+اسوزو,Isuzu,15,1,اسوزو,confirmed
+كاري,Karry,14,2,كارى | كاري,confirmed
+soueastv3,Soueast,14,1,SOUEAST V3,confirmed
+howo,HOWO,14,1,HOWO,confirmed
+همر,GMC,14,1,همر,confirmed
+هينو,HINO,13,1,هينــو,confirmed
+لكزس,Lexus,13,1,لكزس,confirmed
+zhong,Zhong,13,1,ZHONG,confirmed
+قسطور.,Kastour,13,1,قسطور.,confirmed
+جيني,Genni,12,1,جينــى,confirmed
+ديمكسستار,Isuzu,12,1,ديمكس ستار,confirmed
+ليون,Cubra,12,1,ليون,confirmed
+ds7,DS,12,1,DS 7,confirmed
+ud,UD,12,1,UD,confirmed
+yangguang,Wuling,12,1,YANGGUANG,confirmed
+lixiang,Li Auto,11,1,Li Xiang,confirmed
+نيسا,Nissan,10,1,نيسا,confirmed
+bieben,Bieben,10,1,BIEBEN,confirmed
+اكسيد,Exeed,10,1,اكسيد,confirmed
+arcfox,Arcfox,10,1,Arcfox,confirmed
+كيتون,Keyton,9,1,كيتون,confirmed
+swm,SWM,9,1,SWM,confirmed
+alwahsh,Alwahsh,9,1,alwahsh,confirmed
+aito,AITO,9,1,AITO,confirmed
+لامبورجيني,Lamborghini,9,1,لامبورجينى,confirmed
+جامبو,Chevrolet,8,1,جامبو,confirmed
+vedecar,Vedecar,8,1,VEDECAR,confirmed
+hongqi,Hongqi,8,1,HONGQI,confirmed
+leapmotor,Leapmotor,7,1,leapmotor,confirmed
+استونمارتن,Aston Martin,7,1,استون مارتن,confirmed
+هامر,GMC,7,1,هامر,confirmed
+bajajqute,Bagage,7,1,BAJAJ QUTE,confirmed
+lotus,Lotus,7,1,LOTUS,confirmed
+ايجل,DFSK,6,1,ايجل,confirmed
+skoda,Skoda,6,1,Skoda,confirmed
+شانا,Chana,6,1,شانا,confirmed
+tgm,MAN,6,1,TGM,confirmed
+ربدان,Rabdan,6,1,ربدان,confirmed
+سنجان,Changan,5,1,سنجان,confirmed
+سمارت.,Smart,5,1,سمارت.,confirmed
+newgonow,Newgonow,5,1,NEWGONOW,confirmed
+سوديك,Skoda,5,1,سوديك,confirmed
+كوماتسو,Construction,4,1,كوماتسو,confirmed
+qoadro,KIA,4,1,QOADRO,confirmed
+polestar,Polestar,4,1,POLESTAR,confirmed
+بيتسون,Bestune,4,1,بيتسون,confirmed
+فينجون,DFSK,4,1,فينجون,confirmed
+jmev,JMC,4,1,JMEV,confirmed
+gmce,GMC,4,1,GMCE,confirmed
+li,Li Auto,4,1,LI,confirmed
+voyah,Voyah,4,1,voyah,confirmed
+نافكو,Construction,3,1,نافكو,confirmed
+فولكسسوران,Volkswagen,3,1,فولكس سوران,confirmed
+هانتج,Hantang,3,1,هانتج,confirmed
+cat,CAT,3,1,CAT,confirmed
+fahrzeugbau,Construction,3,1,fahrzeugbau,confirmed
+بيلاروس,Construction,3,1,بيلاروس,confirmed
+داسيا,Dacia,3,1,داسيا,confirmed
+haima1,Haima,3,1,HAIMA1,confirmed
+روفر,Land Rover,3,1,روفـــر,confirmed
+ماكلارين,Maclaren,3,1,ماكلارين,confirmed
+tesla,Tesla,3,1,TESLA,confirmed
+nio,NIO,3,1,NIO,confirmed
+icar,Chery,3,1,ICAR,confirmed
+شاكمان,Shacman,3,1,شاكمان,confirmed
+denza,Denza,3,1,Denza,confirmed
+venucia,Venucia,3,1,Venucia,confirmed
+نصر,NASR,3,1,نصــر,confirmed
+جراندبونتو,FIAT,2,1,جراند بونتو,confirmed
+zxauto,ZX Auto,2,1,ZX AUTO,confirmed
+private,Private,2,1,private,confirmed
+هاف,HAV,2,1,هاف,confirmed
+دايهاتسو,Daihatsu,2,1,دايهاتسو,confirmed
+اجرو,AGRO,2,1,أجرو,confirmed
+رانجراند,JEEP,2,1,رانجراند,confirmed
+forland,Forland,2,1,FORLAND,confirmed
+sitrak,Sinotruk,2,1,sitrak,confirmed
+helmarv,Helmarv,2,1,HELMARV,confirmed
+teu,TEU,2,1,teu,confirmed
+maxus,Maxus,2,1,MAXUS,confirmed
+rivian,Rivian,2,1,RIVIAN,confirmed
+maz,Construction,2,1,MAZ,confirmed
+lincoln,Lincoln,2,1,lincoln,confirmed
+انترناشيونال,International,2,1,انترناشيونال,confirmed
+morgan,Morgan,2,1,Morgan,confirmed
+scania,Scania,2,1,scania,confirmed
+skyworth,SKY WORTH,2,1,SKY WORTH,confirmed
+jenhoo,Jenhoo,2,1,JENHOO,confirmed
+هواوي,Huawei,2,1,هواوى,confirmed
+kenbo,Kenbo,1,1,KENBO,confirmed
+التو,Suzuki,1,1,التو,confirmed
+الدبابه,Chevrolet,1,1,الدبابة,confirmed
+هاتنج,Hantang,1,1,هاتنج,confirmed
+دومي,DOMY,1,1,دومى,confirmed
+سبرانزا,Chery,1,1,سبرانزا,confirmed
+cary,Karry,1,1,CARY,confirmed
+راف,Toyota,1,1,راف,confirmed
+hawtai,Hawtai,1,1,HAWTAI,confirmed
+نيوهلاند,Construction,1,1,نيوهلاند,confirmed
+ليبهير,Construction,1,1,ليبهير,confirmed
+افكو,Iveco,1,1,افكو,confirmed
+برايفت,Private,1,1,برايفت,confirmed
+aldamani,Aldamani,1,1,ALDAMANI,confirmed
+لوبد,Construction,1,1,لوبد,confirmed
+كلارك,Construction,1,1,كلارك,confirmed
+برلين,Construction,1,1,برلين,confirmed
+karbonsan,Construction,1,1,karbonsan,confirmed
+kinymh,Construction,1,1,KINYMH,confirmed
+hycan,Hycan,1,1,HYCAN,confirmed
+nooteboom,Construction,1,1,NOOTEBOOM,confirmed
+pacton,Pacton,1,1,PACTON,confirmed
+infinity,Infinity,1,1,INFINITY,confirmed
+chtc,CHTC,1,1,CHTC,confirmed
+زونج-تونج,ZhongTong,1,1,زونج-تونج,confirmed
+سكانيافابيس,Scania,1,1,سكانيا فابيس,confirmed
+كينورث,Kenworth,1,1,كينـورث,confirmed
+crossback,DS,1,1,CROSSBACK,confirmed
+te,Construction,1,1,TE,confirmed
+ديافام,Dongfeng,1,1,دي اف ام,confirmed
+komodo,Komodo,1,1,KOMODO,confirmed
+bm,BMW,1,2,BM | B M,confirmed
+كرايسلر,Chrysler,1,1,كرايسلر,confirmed
+لانجندروف,Land Rover,1,1,لانجندروف,confirmed
+لنكولن,Lincoln,1,1,لنكولن,confirmed
+mclaren,Maclaren,1,1,Mclaren,confirmed
+jiangsu,Jiangsu,1,1,JIANGSU,confirmed
+jidu,JIDU,1,1,jidu,confirmed
+cmax,CMAX,1,1,CMAX,confirmed
+dfac,Dongfeng,1,1,DFAC,confirmed
+بويك,Buick,1,1,بويك,confirmed
+rising,Rising,1,1,RISING,confirmed
+sinogold,Sinogold,1,1,SINOGOLD,confirmed
+taotao,Shineray,1,1,TAOTAO,confirmed
+ineos,Ineos,1,1,INEOS,confirmed
+روكس,ROX,1,1,روكس,confirmed
+ايون,GAC,1,1,ايون,confirmed
+skywell,Skyworth,1,1,skywell,confirmed
+ham150,HAM,1,1,HAM150,confirmed
+gic,GAC,1,1,GIC,confirmed
+fisker,Fisker,1,1,Fisker,confirmed
+jmmc,JMMC,1,1,JMMC,confirmed
+هامرز,GMC,1,1,هامرز,confirmed
+stelato,Stelato,1,1,stelato,confirmed

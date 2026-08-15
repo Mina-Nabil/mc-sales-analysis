@@ -1,0 +1,139 @@
+﻿brand,car_type,distributor,valid_from,valid_to,volume
+Chevrolet,Commercial,Mansour Auto,2021-01-01,,102326
+Nissan,Passenger,Nissan Egypt,2021-01-01,,86013
+Hyundai,Passenger,GB Auto,2021-01-01,,79203
+Chery,Passenger,GB Auto,2021-01-01,,78214
+MG,Passenger,Mansour Auto,2021-01-01,,71901
+KIA,Passenger,EIM/EIT,2021-01-01,,53756
+Toyota,Passenger,Al Futtaim,2021-01-01,,47884
+Mercedes,Passenger,Mercedes Egypt,2021-01-01,,40100
+Suzuki,Passenger,Modern Motors,2021-01-01,,36309
+Skoda,Passenger,Kayan,2021-01-01,,32407
+Renault,Passenger,EIM/EIT,2021-01-01,,27163
+Peugeot,Passenger,Mansour Auto,2021-01-01,,25302
+BYD,Passenger,Mansour Auto,2021-01-01,,24591
+Chevrolet,Passenger,Mansour Auto,2021-01-01,,24450
+FIAT,Passenger,Auto Dynamics,2021-01-01,,23343
+Volkswagen,Passenger,Kayan,2021-01-01,,21106
+Jetour,Passenger,Kasrawy,2021-01-01,,20610
+Mitsubishi,Passenger,Diamond Motors,2021-01-01,,18928
+SEAT,Passenger,Kayan,2021-01-01,,17742
+Citroen,Passenger,Kasrawy,2021-01-01,,14920
+OPEL,Passenger,Mansour Auto,2021-01-01,,13997
+BMW,Passenger,Global Auto,2021-01-01,,12289
+Suzuki,Bus,Modern Motors,2021-01-01,,12257
+King Long,Bus,Habib,2021-01-01,,11647
+GoldenDragon,Bus,Kasrawy,2021-01-01,,10057
+Chevrolet,Bus,Mansour Auto,2021-01-01,,9823
+Geely,Passenger,Automobility,2021-01-01,,9368
+AUDI,Passenger,Kayan,2021-01-01,,9350
+Changan,Passenger,GB Auto,2021-01-01,,9036
+BAIC,Passenger,EIM/EIT,2021-01-01,,7838
+Toyota,Bus,Al Futtaim,2021-01-01,,7327
+JAC,Passenger,Kasrawy,2021-01-01,,6611
+Nissan,Commercial,Nissan Egypt,2021-01-01,,6172
+Soueast,Passenger,Mansour Auto,2021-01-01,,6129
+Haval,Passenger,GB Auto,2021-01-01,,5758
+LADA,Passenger,Al Amal,2021-01-01,,4728
+Honda,Passenger,Al Futtaim,2021-01-01,,4642
+Land Rover,Passenger,MTI,2021-01-01,,3982
+DFSK,Passenger,Al Tarek,2021-01-01,,3755
+JEEP,Passenger,Abo Ghaly,2021-01-01,,3732
+Toyota,Commercial,Al Futtaim,2021-01-01,,3574
+Mitsubishi,Commercial,Diamond Motors,2021-01-01,,3567
+Proton,Passenger,Ezz El Arab,2021-01-01,,3509
+Mercedes,Commercial,Mercedes Egypt,2021-01-01,,3379
+KGM,Passenger,Arabiat,2021-01-01,,3365
+Subaru,Passenger,Abo Ghaly,2021-01-01,,2965
+GAC,Passenger,Auto Jameel,2021-01-01,,2800
+Volvo,Passenger,Ezz El Arab,2021-01-01,,2778
+FORD,Passenger,Auto Jameel,2021-01-01,,2688
+JMC,Commercial,TVD,2021-01-01,,2620
+Cubra,Passenger,Kayan,2021-01-01,,2466
+Mercedes,Bus,Mercedes Egypt,2021-01-01,,2218
+Shineray,Bus,General,2021-01-01,,2148
+Foton,Bus,GB Auto,2021-01-01,,2136
+Porche,Passenger,MTI,2021-01-01,,2082
+Zemex,Bus,EBAM,2021-01-01,,1970
+FIAT,Bus,Auto Dynamics,2021-01-01,,1738
+DS,Passenger,Ezz El Arab,2021-01-01,,1558
+Dongfeng,Passenger,Misr Hilwan,2021-01-01,,1039
+Ssangyong,Passenger,Arabiat,2021-01-01,,992
+GMC,Passenger,Mansour Auto,2021-01-01,,973
+Alfa Romeo,Passenger,Ezz El Arab,2021-01-01,,906
+Mini Coper,Passenger,Global Auto,2021-01-01,,868
+Zeekr,Passenger,EIM/EIT,2021-01-01,,723
+ROX,Passenger,Nour El Din,2021-01-01,,643
+Bestune,Passenger,Misr Hilwan,2021-01-01,,611
+Xpeng,Passenger,Raya Auto,2021-01-01,,574
+Avatr,Passenger,Kasrawy,2021-01-01,,558
+Deepal,Passenger,GB Auto,2021-01-01,,525
+Exeed,Passenger,Natco,2021-01-01,,496
+Hyundai,Bus,EIM/EIT,2021-01-01,,479
+Renault,Bus,EIM/EIT,2021-01-01,,459
+Joylong,Bus,National Motors,2021-01-01,,449
+Jaguar,Passenger,MTI,2021-01-01,,412
+Volvo,Commercial,GB Auto,2021-01-01,,321
+JAC,Commercial,Kasrawy,2021-01-01,,285
+Skania,Commercial,SMG,2021-01-01,,257
+Gyushi,Bus,Geyushi,2021-01-01,,255
+Lynk &amp; Co,Passenger,Ezz El Arab,2021-01-01,,252
+Iveco,Commercial,Kasrawy,2021-01-01,,251
+Hyundai,Commercial,EIM/EIT,2021-01-01,,235
+GWM,Commercial,GB Auto,2021-01-01,,231
+MCV,Bus,MCV,2021-01-01,,221
+Volvo,Bus,GB Auto,2021-01-01,,196
+Shacman,Commercial,Al Fayez,2021-01-01,,192
+Mazda,Passenger,GB Auto,2021-01-01,,189
+Sandstorm,Commercial,Abo Ghaly,2021-01-01,,186
+Bagage,Passenger,GB Auto,2021-01-01,,184
+TATA,Commercial,MTI,2021-01-01,,181
+IM,Passenger,Mansour Auto,2021-01-01,,174
+Renault,Commercial,EIM/EIT,2021-01-01,,167
+LEVC,Passenger,Abo Ghaly,2021-01-01,,156
+Changan,Bus,GB Auto,2021-01-01,,150
+Victory,Bus,IFG,2021-01-01,,139
+GB,Bus,GB Auto,2021-01-01,,124
+Cadillac,Passenger,Mansour Auto,2021-01-01,,120
+SANY,Commercial,Sweedy,2021-01-01,,105
+Smart,Passenger,Ezz El Arab,2021-01-01,,105
+GWM,Passenger,GB Auto,2021-01-01,,104
+Nissan,Bus,Nissan Egypt,2021-01-01,,89
+Rolls Royce,Passenger,Dubai,2021-01-01,,75
+GMC,Commercial,Mansour Auto,2021-01-01,,70
+Ferari,Passenger,Ezz El Arab,2021-01-01,,65
+FORD,Commercial,Auto Jameel,2021-01-01,,64
+Iveco,Bus,Kasrawy,2021-01-01,,63
+Lotus,Passenger,Ezz El Arab,2021-01-01,,61
+FORD,Bus,Auto Jameel,2021-01-01,,53
+GMC,Bus,Mansour Auto,2021-01-01,,52
+Volkswagen,Bus,Kayan,2021-01-01,,52
+Sinotruk,Commercial,Geyushi,2021-01-01,,48
+LondonCap,Bus,Abo Ghaly,2021-01-01,,39
+Mitsubishi,Bus,Diamond Motors,2021-01-01,,31
+Victory,Commercial,IFG,2021-01-01,,30
+Dodge,Commercial,Abo Ghaly,2021-01-01,,19
+Dodge,Passenger,Abo Ghaly,2021-01-01,,19
+Voyah,Passenger,Safy,2021-01-01,,16
+GAC,Bus,Auto Jameel,2021-01-01,,15
+UD,Commercial,GB Auto,2021-01-01,,12
+Dongfeng,Commercial,Misr Hilwan,2021-01-01,,11
+AITO,Passenger,Kasrawy,2021-01-01,,9
+Kinglong,Bus,Habib,2021-01-01,,9
+Chery,Bus,GB Auto,2021-01-01,,8
+Shenray,Bus,General,2021-01-01,,6
+JAC,Bus,Kasrawy,2021-01-01,,4
+Scania,Commercial,SMG,2021-01-01,,4
+JMC,Passenger,TVD,2021-01-01,,3
+Venucia,Passenger,Safy,2021-01-01,,3
+BAIC,Bus,EIM/EIT,2021-01-01,,2
+Citroen,Bus,Kasrawy,2021-01-01,,2
+Dongfeng,Bus,Misr Hilwan,2021-01-01,,2
+Maxus,Passenger,Mansour Auto,2021-01-01,,2
+Chrysler,Passenger,Abo Ghaly,2021-01-01,,1
+Infinity,Passenger,Nissan Egypt,2021-01-01,,1
+KIA,Commercial,EIM/EIT,2021-01-01,,1
+Peugeot,Bus,Mansour Auto,2021-01-01,,1
+Ssangyong,Commercial,Arabiat,2021-01-01,,1
+GMC,0,Mansour Auto,2021-01-01,,0
+LI,Passenger,GB Auto,2021-01-01,,0

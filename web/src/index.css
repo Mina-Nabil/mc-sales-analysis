@@ -1,0 +1,360 @@
+/**
+ * ========================================================
+ * Template Name: Vela — React Admin Dashboard Template
+ * Author: elsayedB
+ * License: You must have a valid license purchased only from ThemeForest
+ * ========================================================
+ */
+
+@import "tailwindcss";
+
+/* ============ Design tokens (Vela) ============ */
+:root {
+  color-scheme: dark;
+
+  --bg-0: #090a0f;
+  --bg-1: #0c0e15;
+  --bg-2: #12141d;
+  --bg-3: #1a1d28;
+  --bg-inset: #0c0e15;
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.13);
+  --t0: #f3f4f9;
+  --t1: #9aa1b2;
+  --t2: #5f6678;
+  --acc: #7c5cff;
+  --acc-2: #9d86ff;
+  --acc-soft: rgba(124, 92, 255, 0.15);
+  --ok: #33d493;
+  --warn: #f7b84e;
+  --bad: #f76d7d;
+  --info: #56a8ff;
+  --ok-soft: rgba(51, 212, 147, 0.14);
+  --bad-soft: rgba(247, 109, 125, 0.14);
+  --warn-soft: rgba(247, 184, 78, 0.16);
+  --info-soft: rgba(86, 168, 255, 0.14);
+  --shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.7);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-0: #eef0f5;
+  --bg-1: #ffffff;
+  --bg-2: #ffffff;
+  --bg-3: #f3f4f9;
+  --bg-inset: #f5f6fb;
+  --line: rgba(17, 20, 32, 0.08);
+  --line-2: rgba(17, 20, 32, 0.14);
+  --t0: #171a23;
+  --t1: #5a6173;
+  --t2: #9097a8;
+  --acc: #6a4cff;
+  --acc-2: #8b6dff;
+  --acc-soft: rgba(106, 76, 255, 0.11);
+  --ok: #16b67e;
+  --warn: #df9626;
+  --bad: #e8556a;
+  --info: #3b8ef0;
+  --ok-soft: rgba(22, 182, 126, 0.12);
+  --bad-soft: rgba(232, 85, 106, 0.12);
+  --warn-soft: rgba(223, 150, 38, 0.14);
+  --info-soft: rgba(59, 142, 240, 0.12);
+  --shadow: 0 14px 34px -18px rgba(20, 24, 40, 0.22);
+}
+
+/* Map raw tokens into Tailwind's theme so utilities like bg-bg-2, text-t0,
+   border-line, text-acc, bg-ok-soft, etc. are generated and stay in sync
+   with the runtime dark/light CSS variables above. */
+@theme {
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-bg-0: var(--bg-0);
+  --color-bg-1: var(--bg-1);
+  --color-bg-2: var(--bg-2);
+  --color-bg-3: var(--bg-3);
+  --color-bg-inset: var(--bg-inset);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-t0: var(--t0);
+  --color-t1: var(--t1);
+  --color-t2: var(--t2);
+  --color-acc: var(--acc);
+  --color-acc-2: var(--acc-2);
+  --color-acc-soft: var(--acc-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-info: var(--info);
+  --color-ok-soft: var(--ok-soft);
+  --color-bad-soft: var(--bad-soft);
+  --color-warn-soft: var(--warn-soft);
+  --color-info-soft: var(--info-soft);
+
+  --shadow-vela: var(--shadow);
+
+  --radius-vela-sm: 9px;
+  --radius-vela-md: 13px;
+  --radius-vela-lg: 18px;
+  --radius-vela-xl: 20px;
+
+  --animate-vela-up: velaUp 0.35s ease both;
+  --animate-vela-pop: velaPop 0.25s ease both;
+  --animate-vela-fade: velaFade 0.25s ease both;
+  --animate-vela-spin: velaSpin 0.8s linear infinite;
+  --animate-vela-pulse: velaPulse 1.6s ease-in-out infinite;
+  --animate-vela-shimmer: velaShimmer 1.6s ease-in-out infinite;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg-0);
+    color: var(--t0);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--line-2);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--t2);
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::selection {
+    background: var(--acc-soft);
+    color: var(--t0);
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--acc);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+/* Native <select> dropdowns: replace the platform arrow with a consistent,
+   theme-aware chevron so every dropdown reads as a dropdown (not a text box).
+   Many selects use appearance-none, which otherwise leaves no indicator. */
+select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa1b2' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 15px 15px;
+  padding-right: 2.1rem !important;
+}
+:root[data-theme="light"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%235a6173' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* Range sliders: consistent, themed track + accent thumb across browsers
+   (the native control renders unstyled/broken otherwise). */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--acc);
+  border: 2px solid var(--bg-1);
+  box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.12);
+}
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-3);
+}
+input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--acc);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--acc);
+  border: 2px solid var(--bg-1);
+  box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+@keyframes velaUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes velaPop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes velaFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes velaSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes velaPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes velaShimmer {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+@keyframes velaRise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes velaDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes velaGrowY {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* ---- Page-open + element entrance animations ---- */
+/* Each route content is keyed by pathname in AppShell, so this re-runs on
+   every navigation. Direct children stagger in for an "elements appear" feel. */
+.vela-page-enter {
+  animation: velaFade 0.3s ease both;
+}
+.vela-page-enter > * {
+  animation: velaRise 0.5s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+.vela-page-enter > *:nth-child(1) {
+  animation-delay: 0.03s;
+}
+.vela-page-enter > *:nth-child(2) {
+  animation-delay: 0.09s;
+}
+.vela-page-enter > *:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.vela-page-enter > *:nth-child(4) {
+  animation-delay: 0.21s;
+}
+.vela-page-enter > *:nth-child(5) {
+  animation-delay: 0.27s;
+}
+.vela-page-enter > *:nth-child(6) {
+  animation-delay: 0.33s;
+}
+.vela-page-enter > *:nth-child(n + 7) {
+  animation-delay: 0.38s;
+}
+
+/* Line/area charts use non-scaling-stroke, which makes stroke-dash draw-in
+   unreliable (it tiles into segments / stops short). Reveal the whole SVG
+   left-to-right via a clip wipe instead — always ends fully drawn. */
+@keyframes velaReveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+.vela-reveal {
+  animation: velaReveal 0.9s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vela-page-enter,
+  .vela-page-enter > *,
+  .vela-reveal {
+    animation: none !important;
+    clip-path: none !important;
+  }
+}

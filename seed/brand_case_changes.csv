@@ -1,0 +1,62 @@
+﻿action,from_name,to_name,volume
+merged,JAC,Jac,6512
+merged,XPENG,Xpeng,459
+merged,DongFeng,Dongfeng,374
+merged,TATA,Tata,130
+merged,VICTORY,Victory,123
+merged,XIAOMI,Xiaomi,104
+merged,SOUEAST,Soueast,89
+merged,YUTONG,Yutong,57
+merged,SANY,Sany,48
+merged,MAN,Man,29
+merged,AITO,Aito,6
+merged,DAYUN,Dayun,5
+merged,HONGQI,Hongqi,3
+merged,BAIC,Baic,2
+re-cased,GYUSHI,Gyushi,255
+re-cased,SHACMAN,Shacman,192
+re-cased,ZHONG,Zhong,13
+re-cased,BIEBEN,Bieben,10
+re-cased,VEDECAR,Vedecar,8
+re-cased,NEWGONOW,Newgonow,5
+re-cased,POLESTAR,Polestar,4
+re-cased,HAIMA,Haima,3
+re-cased,ASTRA,Astra,3
+re-cased,FORLAND,Forland,2
+re-cased,INTERNATIONAL,International,2
+re-cased,JONDA,Jonda,2
+re-cased,JENHOO,Jenhoo,2
+re-cased,HAWTAI,Hawtai,1
+re-cased,KOMODO,Komodo,1
+re-cased,JIANGSU,Jiangsu,1
+re-cased,BUICK,Buick,1
+re-cased,INEOS,Ineos,1
+kept as acronym,MG,MG,71901
+kept as acronym,BYD,BYD,24594
+kept as acronym,BMW,BMW,12289
+kept as acronym,DFSK,DFSK,4385
+kept as acronym,KGM,KGM,3365
+kept as acronym,GAC,GAC,2815
+kept as acronym,JMC,JMC,2623
+kept as acronym,DS,DS,1558
+kept as acronym,KYC,KYC,1156
+kept as acronym,GMC,GMC,1095
+kept as acronym,ROX,ROX,643
+kept as acronym,GWM,GWM,335
+kept as acronym,MCV,MCV,221
+kept as acronym,VGV,VGV,175
+kept as acronym,IM,IM,174
+kept as acronym,LEVC,LEVC,156
+kept as acronym,GB,GB,124
+kept as acronym,DFM,DFM,22
+kept as acronym,HOWO,HOWO,14
+kept as acronym,UD,UD,12
+kept as acronym,SWM,SWM,9
+kept as acronym,CAT,CAT,3
+kept as acronym,TGM,TGM,3
+kept as acronym,CHTC,CHTC,1
+kept as acronym,JIDU,JIDU,1
+kept as acronym,CMAX,CMAX,1
+kept as acronym,HAM,HAM,1
+kept as acronym,JMEV,JMEV,1
+kept as acronym,JMMC,JMMC,1

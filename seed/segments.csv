@@ -1,0 +1,25 @@
+﻿name,volume,in_use,observed_tier
+Sedan,396593,yes,Baseline/Highline
+Hatchback,44392,yes,Baseline/Highline
+Crossover,104842,yes,Baseline/Highline
+Compact SUV,210365,yes,Baseline/Highline
+SUV,112590,yes,Baseline/Highline
+Coupe,0,no (available),
+Convertible,0,no (available),
+Roadster,0,no (available),
+Station Wagon,0,no (available),
+Liftback,0,no (available),
+MPV,11925,yes,Baseline/Highline
+Minivan,0,no (available),
+Van,63543,yes,Baseline
+Pickup,93368,yes,Baseline
+Minibus,1310,yes,Baseline
+Bus,1924,yes,Baseline
+Microcar,0,no (available),
+Limousine,0,no (available),
+Sports car,1439,yes,Highline
+Supercar,0,no (available),
+Hypercar,0,no (available),
+Off-roader,0,no (available),
+Truck,38841,yes,Baseline
+Construction,1059,yes,Baseline

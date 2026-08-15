@@ -1,0 +1,36 @@
+﻿action,item,decision,volume
+model corrected,Abaza Truck,"{""segment"": ""Truck""}",4768
+model corrected,Jetour X95,"{""segment"": ""SUV""}",1374
+model corrected,Toyota Land Cruiser,"{""segment"": ""SUV"", ""car_type"": ""Passenger""}",1145
+model corrected,Renault Kardian,"{""segment"": ""Crossover""}",1032
+model corrected,Honda ZR-V,"{""segment"": ""SUV""}",745
+model corrected,Xpeng Xpeng,"{""segment"": ""Sedan""}",1
+model corrected,Chery A213,"{""segment"": ""Sedan""}",1
+governorate added,Special,7 national/special traffic units,36838
+long tail delegated,338 SUV models,AI agent proposes segment at first import,12708
+accepted as resolved,22 models + all remaining aliases,"user: ""from this row downwards LEAVE all the resolved values""",0
+model corrected,Honda ZR-V,SUV -> Compact SUV (user agreed with research),745
+brand ALL CAPS,Opel,OPEL,13997
+brand ALL CAPS,Fiat,FIAT,25082
+brand ALL CAPS,Kia,KIA,53757
+brand ALL CAPS,Seat,SEAT,17742
+brand ALL CAPS,Lada,LADA,4728
+brand ALL CAPS,Ford,FORD,2805
+brand ALL CAPS,Jac,JAC,6900
+brand ALL CAPS,Jeep,JEEP,3732
+brand ALL CAPS,Man,MAN,273
+brand ALL CAPS,Fahd,FAHD,111
+brand ALL CAPS,Faw,FAW,22
+brand ALL CAPS,Baic,BAIC,7840
+brand ALL CAPS,Domy,DOMY,1
+brand ALL CAPS,Hav,HAV,2
+brand ALL CAPS,Agro,AGRO,2
+brand ALL CAPS,Hino,HINO,13
+brand ALL CAPS,Teu,TEU,2
+brand ALL CAPS,Sany,SANY,107
+brand ALL CAPS,Tata,TATA,181
+brand ALL CAPS,Audi,AUDI,9350
+brand ALL CAPS,Nio,NIO,3
+brand ALL CAPS,Neta,NETA,43
+brand ALL CAPS,Aito,AITO,9
+brand ALL CAPS,Nasr,NASR,3

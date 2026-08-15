@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16
+    container_name: mc-sales-db
+    environment:
+      POSTGRES_USER: mc
+      POSTGRES_PASSWORD: mc
+      POSTGRES_DB: mcsales
+    ports:
+      - "5433:5432"   # host 5433 to avoid clashing with a local Postgres
+    volumes:
+      - mc_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mc -d mcsales"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  mc_pgdata:
