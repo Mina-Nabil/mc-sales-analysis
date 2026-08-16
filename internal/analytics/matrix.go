@@ -48,14 +48,18 @@ var filters = map[string]string{
 	"distributor":  "d.name",
 }
 
-// Params configures a matrix query.
+// Params configures a matrix query. The primary period is (Year, Month) and the
+// comparison period is (CompareYear, CompareMonth); Month/CompareMonth are 0 for
+// a whole year or 1..12 for a single month, so the matrix can compare year-over-
+// year, month-over-month, or any two periods.
 type Params struct {
-	Dimension   string
-	Year        int
-	CompareYear int
-	Filters     map[string][]string // key → allowed values
-	Months      []int               // optional month filter
-	Limit       int
+	Dimension    string
+	Year         int
+	Month        int // 0 = whole year
+	CompareYear  int
+	CompareMonth int // 0 = whole year (or mirror the primary month, see below)
+	Filters      map[string][]string
+	Limit        int
 }
 
 // Row is one dimension value with its full measure set.
@@ -124,25 +128,35 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 		) d ON true`
 	}
 
+	// Resolve the two comparison windows as month sets:
+	//   S1 = primary period's months, S2 = compare period's months.
+	// A single month → [that month]; a whole year → the months actually present
+	// in that year (so a partial current year compares fairly). If the compare
+	// month is unset but the primary is a single month, mirror it into the
+	// compare year (e.g. "Jul 2026 vs 2025" ⇒ Jul-over-Jul).
+	s1 := monthSet(ctx, pool, p.Year, p.Month)
+	var s2 []int
+	if p.CompareMonth > 0 {
+		s2 = []int{p.CompareMonth}
+	} else if p.Month > 0 {
+		s2 = []int{p.Month}
+	} else {
+		s2 = s1
+	}
+
 	args := []any{p.Year, p.CompareYear}
 	where := []string{"f.period_year IN ($1,$2)"}
-	add := func(expr string, vals []string) {
+	add := func(expr string, vals any) int {
 		args = append(args, vals)
-		where = append(where, fmt.Sprintf("%s = ANY($%d)", expr, len(args)))
+		return len(args)
 	}
 	for key, vals := range p.Filters {
 		if expr, ok := filters[key]; ok && len(vals) > 0 {
-			add(expr, vals)
+			where = append(where, fmt.Sprintf("%s = ANY($%d)", expr, add(expr, vals)))
 		}
 	}
-	if len(p.Months) > 0 {
-		args = append(args, p.Months)
-		where = append(where, fmt.Sprintf("f.period_month = ANY($%d::int[])", len(args)))
-	}
-
-	// months covered by the selected year → comparable YTD window
-	maxMonth := 12
-	_ = pool.QueryRow(ctx, `SELECT COALESCE(max(period_month),12) FROM facts WHERE period_year=$1`, p.Year).Scan(&maxMonth)
+	s1Idx := add("", s1)
+	s2Idx := add("", s2)
 
 	q := fmt.Sprintf(`
 		WITH base AS (
@@ -152,12 +166,10 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 		)
 		SELECT key,
 		  %s,
-		  COALESCE(SUM(vol) FILTER (WHERE yr=$1),0) AS total_year,
-		  COALESCE(SUM(vol) FILTER (WHERE yr=$2),0) AS total_prior,
-		  COALESCE(SUM(vol) FILTER (WHERE yr=$1 AND mo<=%d),0) AS ytd_cur,
-		  COALESCE(SUM(vol) FILTER (WHERE yr=$2 AND mo<=%d),0) AS ytd_prior
+		  COALESCE(SUM(vol) FILTER (WHERE yr=$1 AND mo = ANY($%d::int[])),0) AS total_primary,
+		  COALESCE(SUM(vol) FILTER (WHERE yr=$2 AND mo = ANY($%d::int[])),0) AS total_prior
 		FROM base GROUP BY key`,
-		dimExpr, joins, strings.Join(where, " AND "), monthFilters(), maxMonth, maxMonth)
+		dimExpr, joins, strings.Join(where, " AND "), monthFilters(), s1Idx, s2Idx)
 
 	rows, err := pool.Query(ctx, q, args...)
 	if err != nil {
@@ -177,10 +189,11 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 		for i := range r.Months {
 			dst = append(dst, &r.Months[i])
 		}
-		dst = append(dst, &r.Total, &totalPrior, &r.YTDCurrent, &r.YTDPrior)
+		dst = append(dst, &r.Total, &totalPrior)
 		if err := rows.Scan(dst...); err != nil {
 			return res, err
 		}
+		r.YTDCurrent, r.YTDPrior = r.Total, totalPrior // period totals (aligned windows)
 		recs = append(recs, rec{r, totalPrior})
 	}
 	if err := rows.Err(); err != nil {
@@ -222,13 +235,12 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 			r.SharePctPrior = float64(prior) / denP * 100
 		}
 		r.SharePointDelta = r.SharePct - r.SharePctPrior
-		// Growth is YTD-based (same month window in both years) so a partial
-		// current year compares fairly against the prior year (§5.2).
-		if r.YTDPrior > 0 {
-			g := (float64(r.YTDCurrent) - float64(r.YTDPrior)) / float64(r.YTDPrior) * 100
+		// The two windows are aligned (same month count), so growth is a direct
+		// period-over-period comparison (§5.2).
+		if prior > 0 {
+			g := (float64(r.Total) - float64(prior)) / float64(prior) * 100
 			r.GrowthPct = &g
 		} // else nil → "new"
-		_ = prior
 		r.Rank = rankCur[i]
 		r.RankPrior = rankPrior[i]
 		recs[i].row = r
@@ -245,6 +257,33 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 	}
 	return res, nil
 }
+
+// monthSet returns [month] for a single month, or the months actually present
+// in the year (fallback: all 12) for a whole-year window.
+func monthSet(ctx context.Context, pool *pgxpool.Pool, year, month int) []int {
+	if month > 0 {
+		return []int{month}
+	}
+	rows, err := pool.Query(ctx,
+		`SELECT DISTINCT period_month FROM facts WHERE period_year=$1 ORDER BY period_month`, year)
+	if err != nil {
+		return allMonths()
+	}
+	defer rows.Close()
+	var out []int
+	for rows.Next() {
+		var m int
+		if rows.Scan(&m) == nil {
+			out = append(out, m)
+		}
+	}
+	if len(out) == 0 {
+		return allMonths()
+	}
+	return out
+}
+
+func allMonths() []int { return []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} }
 
 func monthFilters() string {
 	parts := make([]string, 12)

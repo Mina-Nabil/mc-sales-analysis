@@ -13,7 +13,9 @@ export default function Dashboard() {
   const [dims, setDims] = useState<string[]>([])
   const [dimension, setDimension] = useState('brand')
   const [year, setYear] = useState(2026)
+  const [month, setMonth] = useState(0) // 0 = full year
   const [compare, setCompare] = useState(2025)
+  const [compareMonth, setCompareMonth] = useState(0)
   const [carType, setCarType] = useState('')
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(false)
@@ -22,9 +24,11 @@ export default function Dashboard() {
 
   const qs = useMemo(() => {
     const p = new URLSearchParams({ dimension, year: String(year), compare_year: String(compare), limit: '100' })
+    if (month) p.set('month', String(month))
+    if (compareMonth) p.set('compare_month', String(compareMonth))
     if (carType) p.set('filter.car_type', carType)
     return p.toString()
-  }, [dimension, year, compare, carType])
+  }, [dimension, year, month, compare, compareMonth, carType])
 
   useEffect(() => {
     setLoading(true)
@@ -51,8 +55,20 @@ export default function Dashboard() {
               {(dims.length ? dims : ['brand']).map((d) => <option key={d} value={d}>{cap(d)}</option>)}
             </select>
           </Ctl>
-          <Ctl label="Year"><select className={sel} value={year} onChange={(e) => setYear(Number(e.target.value))}>{YEARS.map((y) => <option key={y}>{y}</option>)}</select></Ctl>
-          <Ctl label="vs"><select className={sel} value={compare} onChange={(e) => setCompare(Number(e.target.value))}>{YEARS.map((y) => <option key={y}>{y}</option>)}</select></Ctl>
+          <Ctl label="Period">
+            <select className={sel} value={year} onChange={(e) => setYear(Number(e.target.value))}>{YEARS.map((y) => <option key={y}>{y}</option>)}</select>
+            <select className={sel} value={month} onChange={(e) => setMonth(Number(e.target.value))}>
+              <option value={0}>Full year</option>
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </Ctl>
+          <Ctl label="vs">
+            <select className={sel} value={compare} onChange={(e) => setCompare(Number(e.target.value))}>{YEARS.map((y) => <option key={y}>{y}</option>)}</select>
+            <select className={sel} value={compareMonth} onChange={(e) => setCompareMonth(Number(e.target.value))}>
+              <option value={0}>{month ? 'Same month' : 'Full year'}</option>
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </Ctl>
           <Ctl label="Car type"><select className={sel} value={carType} onChange={(e) => setCarType(e.target.value)}>{CAR_TYPES.map((t) => <option key={t} value={t}>{t || 'All'}</option>)}</select></Ctl>
           {data && <span className="ml-auto text-[12px] text-t1">Total <b className="text-t0">{fmt(data.denominator)}</b> units · {rows.length} rows</span>}
         </div>

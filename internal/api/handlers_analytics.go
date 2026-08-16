@@ -13,11 +13,13 @@ import (
 func parseMatrixParams(r *http.Request) analytics.Params {
 	q := r.URL.Query()
 	p := analytics.Params{
-		Dimension:   or(q.Get("dimension"), "brand"),
-		Year:        atoiOr(q.Get("year"), 2026),
-		CompareYear: atoiOr(q.Get("compare_year"), 0),
-		Filters:     map[string][]string{},
-		Limit:       atoiOr(q.Get("limit"), 100),
+		Dimension:    or(q.Get("dimension"), "brand"),
+		Year:         atoiOr(q.Get("year"), 2026),
+		Month:        atoiOr(q.Get("month"), 0),
+		CompareYear:  atoiOr(q.Get("compare_year"), 0),
+		CompareMonth: atoiOr(q.Get("compare_month"), 0),
+		Filters:      map[string][]string{},
+		Limit:        atoiOr(q.Get("limit"), 100),
 	}
 	if p.CompareYear == 0 {
 		p.CompareYear = p.Year - 1
@@ -25,13 +27,6 @@ func parseMatrixParams(r *http.Request) analytics.Params {
 	for key, vals := range q {
 		if strings.HasPrefix(key, "filter.") && len(vals) > 0 && vals[0] != "" {
 			p.Filters[strings.TrimPrefix(key, "filter.")] = splitCSV(vals[0])
-		}
-	}
-	if m := q.Get("month"); m != "" {
-		for _, s := range splitCSV(m) {
-			if n, err := strconv.Atoi(s); err == nil {
-				p.Months = append(p.Months, n)
-			}
 		}
 	}
 	return p
@@ -66,7 +61,7 @@ func (s *Server) analyticsExport(w http.ResponseWriter, r *http.Request) {
 
 	header := []any{cases(res.Dimension)}
 	header = append(header, toAny(monthNames)...)
-	header = append(header, "Total", "Share %", "YTD "+strconv.Itoa(res.Year), "YTD "+strconv.Itoa(res.CompareYear), "Growth %", "Δ Share pts", "Rank", "Rank prior")
+	header = append(header, "Total", "Share %", "Compare total", "Growth %", "Δ Share pts", "Rank", "Rank prior")
 	setRow(f, sheet, 1, header)
 
 	for i, row := range res.Rows {
@@ -80,7 +75,7 @@ func (s *Server) analyticsExport(w http.ResponseWriter, r *http.Request) {
 		}
 		rec = append(rec, row.Total,
 			fmt.Sprintf("%.1f%%", row.SharePct),
-			row.YTDCurrent, row.YTDPrior, growth,
+			row.YTDPrior, growth,
 			fmt.Sprintf("%+.1f", row.SharePointDelta),
 			row.Rank, row.RankPrior)
 		setRow(f, sheet, i+2, rec)
