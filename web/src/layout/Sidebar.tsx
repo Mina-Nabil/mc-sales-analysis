@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
 
 const NAV: [string, string, string, boolean?][] = [
@@ -17,6 +17,11 @@ const linkBase =
 const linkActive = 'bg-acc-soft text-acc!'
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  // Carry the active filter query across pages so filters stay global (§5.3).
+  const { search } = useLocation()
+  const carried = new URLSearchParams(search)
+  for (const k of [...carried.keys()]) if (!k.startsWith('filter.')) carried.delete(k)
+  const filterSearch = carried.toString()
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2.5 px-5 py-[18px]" style={{ minHeight: 74 }}>
@@ -34,7 +39,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3.5 pb-3.5">
         <p className="px-2.5 pb-1.5 pt-1 text-[10.5px] font-bold uppercase tracking-wider text-t2">Menu</p>
         {NAV.map(([to, label, d, end]) => (
-          <NavLink key={to} to={to} end={!!end} onClick={onNavigate}
+          <NavLink key={to} to={{ pathname: to, search: filterSearch }} end={!!end} onClick={onNavigate}
             className={({ isActive }) => cn(linkBase, isActive && linkActive)}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
               <path d={d} />

@@ -35,6 +35,9 @@ export const api = {
   dimensions: () => req('GET', '/analytics/dimensions'),
   matrix: (qs: string) => req('GET', '/analytics/matrix?' + qs),
   exportHref: (qs: string) => '/api/v1/analytics/export.xlsx?' + qs,
+  values: (dimension: string, qs = '') => req('GET', `/analytics/values?dimension=${dimension}${qs ? '&' + qs : ''}`),
+  agg: (dimension: string, qs = '') => req('GET', `/analytics/agg?dimension=${dimension}${qs ? '&' + qs : ''}`),
+  timeseries: (qs = '') => req('GET', '/analytics/timeseries' + (qs ? '?' + qs : '')),
 
   review: (limit = 100) => req('GET', `/review?limit=${limit}`),
   confirm: (id: number, modelID?: number) => req('POST', `/review/${id}/confirm`, modelID ? { model_id: modelID } : {}),

@@ -79,6 +79,45 @@ func (s *Server) analyticsDimensions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, analytics.AvailableDimensions())
 }
 
+// analyticsValues lists distinct values of a dimension for the filter UI.
+func (s *Server) analyticsValues(w http.ResponseWriter, r *http.Request) {
+	p := parseMatrixParams(r)
+	dim := or(r.URL.Query().Get("dimension"), "brand")
+	vals, err := analytics.Values(r.Context(), s.pool, dim, p.Filters)
+	if err != nil {
+		httpErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, vals)
+}
+
+// analyticsAgg returns SUM(volume) by dimension for the filtered set (all-time
+// or a single ?year), ranked — powers the Analytics charts.
+func (s *Server) analyticsAgg(w http.ResponseWriter, r *http.Request) {
+	p := parseMatrixParams(r)
+	dim := or(r.URL.Query().Get("dimension"), "brand")
+	year := atoiOr(r.URL.Query().Get("year"), 0)
+	buckets, err := analytics.Aggregate(r.Context(), s.pool, dim, p.Filters, year)
+	if err != nil {
+		httpErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, buckets)
+}
+
+// analyticsTimeseries returns per-month totals for the filtered set (all periods,
+// or a single year when ?year is given).
+func (s *Server) analyticsTimeseries(w http.ResponseWriter, r *http.Request) {
+	p := parseMatrixParams(r)
+	year := atoiOr(r.URL.Query().Get("year"), 0)
+	pts, err := analytics.Timeseries(r.Context(), s.pool, p.Filters, year)
+	if err != nil {
+		httpErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, pts)
+}
+
 var monthNames = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
 
 func (s *Server) analyticsExport(w http.ResponseWriter, r *http.Request) {

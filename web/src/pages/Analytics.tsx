@@ -1,54 +1,52 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, fmt } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardSubtitle, Badge } from '@/components/ui'
 import { AreaLineChart, BarChart, DonutChart } from '@/components/charts'
+import { FilterBar, useFilters } from '@/components/FilterBar'
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const PALETTE = ['var(--acc)', 'var(--info)', 'var(--ok)', 'var(--warn)', 'var(--bad)', 'var(--acc-2)', '#c084fc', '#22d3ee']
 const selCls = 'h-9 rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-2.5 text-[13px] text-t0'
 
 export default function Analytics() {
-  const [batches, setBatches] = useState<any[]>([])
+  const [sp, setSp] = useSearchParams()
+  const { filters } = useFilters()
+  const [years, setYears] = useState<number[]>([])
   const [brands, setBrands] = useState<any[]>([])
   const [segments, setSegments] = useState<any[]>([])
-  const [years, setYears] = useState<number[]>([])
-  const [year, setYear] = useState<'all' | number>('all')
+  const [ts, setTs] = useState<any[]>([])
 
+  const year = sp.get('year') || 'all'
+  const setYear = (v: string) => setSp((prev) => { const n = new URLSearchParams(prev); if (v === 'all') n.delete('year'); else n.set('year', v); return n }, { replace: true })
+
+  const qs = useMemo(() => {
+    const p = new URLSearchParams()
+    for (const d in filters) p.set('filter.' + d, filters[d].join(','))
+    if (year !== 'all') p.set('year', year)
+    return p.toString()
+  }, [JSON.stringify(filters), year]) // eslint-disable-line
+
+  useEffect(() => { api.years().then(setYears).catch(() => {}) }, [])
   useEffect(() => {
-    api.imports().then(setBatches).catch(() => {})
-    api.years().then(setYears).catch(() => {})
-  }, [])
-  useEffect(() => {
-    api.brands(year).then(setBrands).catch(() => {})
-    api.segments(year).then(setSegments).catch(() => {})
-  }, [year])
+    api.agg('brand', qs).then(setBrands).catch(() => setBrands([]))
+    api.agg('segment', qs).then(setSegments).catch(() => setSegments([]))
+    api.timeseries(qs).then(setTs).catch(() => setTs([]))
+  }, [qs])
 
-  const label = year === 'all' ? 'All time' : String(year)
+  const label = year === 'all' ? 'All time' : year
 
-  // committed batches → time series. All-time: every period chronologically.
-  // A specific year: that year's 12 months (0 for missing).
   const series = useMemo(() => {
-    const committed = batches
-      .filter((b) => b.state === 'committed')
-      .sort((a, b) => a.period_year * 12 + a.period_month - (b.period_year * 12 + b.period_month))
-    if (year === 'all') {
-      return { data: committed.map((b) => b.volume), labels: committed.map((b) => `${MONTHS[b.period_month]} ${String(b.period_year).slice(2)}`) }
-    }
+    if (year === 'all') return { data: ts.map((p) => Number(p.volume)), labels: ts.map((p) => `${MONTHS[p.month]} ${String(p.year).slice(2)}`) }
     const byMonth = new Map<number, number>()
-    committed.filter((b) => b.period_year === year).forEach((b) => byMonth.set(b.period_month, b.volume))
+    ts.forEach((p) => byMonth.set(p.month, Number(p.volume)))
     const data: number[] = [], labels: string[] = []
     for (let m = 1; m <= 12; m++) { data.push(byMonth.get(m) || 0); labels.push(MONTHS[m]) }
     return { data, labels }
-  }, [batches, year])
+  }, [ts, year])
 
-  const topBrands = useMemo(
-    () => brands.filter((b) => b.volume > 0).slice(0, 8).map((b, i) => ({ label: b.name, value: b.volume, color: PALETTE[i % PALETTE.length] })),
-    [brands],
-  )
-  const segMix = useMemo(
-    () => segments.filter((s) => s.volume > 0).sort((a, b) => b.volume - a.volume).slice(0, 7).map((s, i) => ({ label: s.name, value: s.volume, color: PALETTE[i % PALETTE.length] })),
-    [segments],
-  )
+  const topBrands = brands.filter((b) => b.volume > 0).slice(0, 8).map((b, i) => ({ label: b.key, value: Number(b.volume), color: PALETTE[i % PALETTE.length] }))
+  const segMix = segments.filter((s) => s.volume > 0).slice(0, 7).map((s, i) => ({ label: s.key, value: Number(s.volume), color: PALETTE[i % PALETTE.length] }))
   const latest = series.data[series.data.length - 1] || 0
   const prev = series.data[series.data.length - 2] || 0
   const mom = prev ? ((latest - prev) / prev) * 100 : 0
@@ -62,12 +60,14 @@ export default function Analytics() {
         </div>
         <label className="flex items-center gap-2 text-[12px] font-semibold text-t1">
           Year
-          <select className={selCls} value={String(year)} onChange={(e) => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+          <select className={selCls} value={year} onChange={(e) => setYear(e.target.value)}>
             <option value="all">All time</option>
             {years.map((y) => <option key={y} value={y}>{y}</option>)}
           </select>
         </label>
       </div>
+
+      <Card padding="sm"><FilterBar /></Card>
 
       <Card>
         <CardHeader>
@@ -97,13 +97,13 @@ export default function Analytics() {
         <CardHeader><div><CardTitle>Brand leaderboard</CardTitle><CardSubtitle>Top 12 by volume · {label}</CardSubtitle></div></CardHeader>
         <div className="space-y-2.5">
           {brands.slice(0, 12).map((b, i) => {
-            const max = brands[0]?.volume || 1
+            const max = Number(brands[0]?.volume) || 1
             return (
-              <div key={b.id} className="flex items-center gap-3">
+              <div key={b.key} className="flex items-center gap-3">
                 <span className="w-5 text-right text-[12px] font-bold text-t2">{i + 1}</span>
-                <span className="w-28 shrink-0 truncate text-[13px] font-semibold text-t0">{b.name}</span>
+                <span className="w-28 shrink-0 truncate text-[13px] font-semibold text-t0">{b.key}</span>
                 <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-bg-3">
-                  <div className="h-full rounded-full" style={{ width: `${(b.volume / max) * 100}%`, background: PALETTE[i % PALETTE.length] }} />
+                  <div className="h-full rounded-full" style={{ width: `${(Number(b.volume) / max) * 100}%`, background: PALETTE[i % PALETTE.length] }} />
                 </div>
                 <span className="w-20 text-right text-[12.5px] font-bold tabular-nums text-t1">{fmt(b.volume)}</span>
               </div>

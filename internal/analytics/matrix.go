@@ -104,29 +104,7 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 	if !ok {
 		return res, fmt.Errorf("unknown dimension %q", p.Dimension)
 	}
-	needDist := p.Dimension == "distributor"
-	if _, ok := p.Filters["distributor"]; ok {
-		needDist = true
-	}
-
-	joins := `
-		LEFT JOIN brands b        ON b.id = f.brand_id
-		LEFT JOIN models m        ON m.id = f.model_id
-		LEFT JOIN segments seg    ON seg.id = m.segment_id
-		LEFT JOIN governorates g  ON g.id = f.governorate_id
-		LEFT JOIN regions rg      ON rg.id = g.region_id
-		LEFT JOIN traffic_units tu ON tu.id = f.traffic_unit_id`
-	if needDist {
-		joins += `
-		LEFT JOIN LATERAL (
-			SELECT dd.name FROM distributor_assignments da
-			  JOIN distributors dd ON dd.id = da.distributor_id
-			 WHERE da.brand_id = f.brand_id AND da.car_type = m.car_type
-			   AND da.valid_from <= make_date(f.period_year, f.period_month, 1)
-			   AND (da.valid_to IS NULL OR da.valid_to > make_date(f.period_year, f.period_month, 1))
-			 LIMIT 1
-		) d ON true`
-	}
+	joins := joinBlock(needsDist(p.Dimension, p.Filters))
 
 	// Resolve the two comparison windows as month sets:
 	//   S1 = primary period's months, S2 = compare period's months.
@@ -256,6 +234,167 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 		res.Rows = append(res.Rows, recs[i].row)
 	}
 	return res, nil
+}
+
+// needsDist reports whether the distributor LATERAL join is required.
+func needsDist(dimension string, f map[string][]string) bool {
+	if dimension == "distributor" {
+		return true
+	}
+	_, ok := f["distributor"]
+	return ok
+}
+
+// joinBlock is the standard set of LEFT JOINs that make every dimension and
+// filter expression resolvable; the distributor LATERAL is added only when needed.
+func joinBlock(withDist bool) string {
+	j := `
+		LEFT JOIN brands b        ON b.id = f.brand_id
+		LEFT JOIN models m        ON m.id = f.model_id
+		LEFT JOIN segments seg    ON seg.id = m.segment_id
+		LEFT JOIN governorates g  ON g.id = f.governorate_id
+		LEFT JOIN regions rg      ON rg.id = g.region_id
+		LEFT JOIN traffic_units tu ON tu.id = f.traffic_unit_id`
+	if withDist {
+		j += `
+		LEFT JOIN LATERAL (
+			SELECT dd.name FROM distributor_assignments da
+			  JOIN distributors dd ON dd.id = da.distributor_id
+			 WHERE da.brand_id = f.brand_id AND da.car_type = m.car_type
+			   AND da.valid_from <= make_date(f.period_year, f.period_month, 1)
+			   AND (da.valid_to IS NULL OR da.valid_to > make_date(f.period_year, f.period_month, 1))
+			 LIMIT 1
+		) d ON true`
+	}
+	return j
+}
+
+// filterWhere builds "expr = ANY($n)" conditions from p.Filters, appending to args.
+func filterWhere(f map[string][]string, args *[]any) []string {
+	var where []string
+	for key, vals := range f {
+		if expr, ok := filters[key]; ok && len(vals) > 0 {
+			*args = append(*args, vals)
+			where = append(where, fmt.Sprintf("%s = ANY($%d)", expr, len(*args)))
+		}
+	}
+	return where
+}
+
+// Values returns the distinct values of a dimension (for filter option lists),
+// respecting any active filters, capped at 1000.
+func Values(ctx context.Context, pool *pgxpool.Pool, dimension string, f map[string][]string) ([]string, error) {
+	dimExpr, ok := dimensions[dimension]
+	if !ok {
+		return nil, fmt.Errorf("unknown dimension %q", dimension)
+	}
+	var args []any
+	where := filterWhere(f, &args)
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	}
+	q := fmt.Sprintf(`SELECT DISTINCT %s AS v FROM facts f %s %s ORDER BY v LIMIT 1000`,
+		dimExpr, joinBlock(needsDist(dimension, f)), whereSQL)
+	rows, err := pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// Bucket is one dimension value's total (for filtered, all-time-or-year charts).
+type Bucket struct {
+	Key    string `json:"key"`
+	Volume int64  `json:"volume"`
+}
+
+// Aggregate returns SUM(volume) by dimension over the filtered set, for a single
+// year (year>0) or all time (year==0), ranked descending.
+func Aggregate(ctx context.Context, pool *pgxpool.Pool, dimension string, f map[string][]string, year int) ([]Bucket, error) {
+	dimExpr, ok := dimensions[dimension]
+	if !ok {
+		return nil, fmt.Errorf("unknown dimension %q", dimension)
+	}
+	var args []any
+	where := filterWhere(f, &args)
+	if year > 0 {
+		args = append(args, year)
+		where = append(where, fmt.Sprintf("f.period_year = $%d", len(args)))
+	}
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	}
+	q := fmt.Sprintf(`SELECT %s AS k, COALESCE(sum(f.volume),0) AS v
+		FROM facts f %s %s GROUP BY k ORDER BY v DESC LIMIT 200`,
+		dimExpr, joinBlock(needsDist(dimension, f)), whereSQL)
+	rows, err := pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Bucket{}
+	for rows.Next() {
+		var b Bucket
+		if err := rows.Scan(&b.Key, &b.Volume); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+// Point is one period's total in a time series.
+type Point struct {
+	Year   int   `json:"year"`
+	Month  int   `json:"month"`
+	Volume int64 `json:"volume"`
+}
+
+// Timeseries returns per-(year,month) totals for the filtered set, all periods
+// (or a single year when p.Year>0 and p.Month==0 is not enough — callers pass
+// year via filters). Ordered chronologically.
+func Timeseries(ctx context.Context, pool *pgxpool.Pool, f map[string][]string, year int) ([]Point, error) {
+	var args []any
+	where := filterWhere(f, &args)
+	if year > 0 {
+		args = append(args, year)
+		where = append(where, fmt.Sprintf("f.period_year = $%d", len(args)))
+	}
+	whereSQL := ""
+	if len(where) > 0 {
+		whereSQL = "WHERE " + strings.Join(where, " AND ")
+	}
+	q := fmt.Sprintf(`
+		SELECT f.period_year, f.period_month, COALESCE(sum(f.volume),0)
+		  FROM facts f %s %s
+		 GROUP BY f.period_year, f.period_month
+		 ORDER BY f.period_year, f.period_month`,
+		joinBlock(needsDist("", f)), whereSQL)
+	rows, err := pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Point{}
+	for rows.Next() {
+		var pt Point
+		if err := rows.Scan(&pt.Year, &pt.Month, &pt.Volume); err != nil {
+			return nil, err
+		}
+		out = append(out, pt)
+	}
+	return out, rows.Err()
 }
 
 // monthSet returns [month] for a single month, or the months actually present
