@@ -95,22 +95,30 @@ under `$UPLOAD_DIR` (default `./uploads`).
 
 ## Front-end (React SPA)
 
-A Vite + React app in `web/`, built to `web/dist/` and **embedded in the Go
-binary** — `server serve` hosts it at `/` with deep-link fallback. Screens:
-Overview (stats + data-confidence bar), Review queue (volume-ranked inbox with
-keyboard shortcuts), Car tree (brand→model→alias browser), Import (upload →
-dry-run → commit + batch history), Settings, and Audit.
+A **Vite + React 19 + TypeScript + Tailwind v4** app in `web/`, built to
+`web/dist/` and **embedded in the Go binary** — `server serve` hosts it at `/`
+with deep-link fallback. Dark/light themed. Screens: Overview, **Analytics**
+(trend/bar/donut charts), **Dashboard** (the §5.1 matrix with Excel export),
+Review queue (keyboard inbox + new-brand/model), Car tree (browse + edit +
+merge), Import (upload → dry-run → commit), Settings, Audit.
 
 ```bash
 cd web
 npm install
-npm run build          # → web/dist (commit it; the Go build embeds it)
+npm run build          # → web/dist (committed; the Go build embeds it)
 npm run dev            # optional: Vite dev server on :5173, proxies /api to :8080
 ```
 
-After changing the front-end, re-run `npm run build` then rebuild the Go binary
-so the new assets are embedded. Analytics dashboards (the §5.1 matrix) are
-Phase 2 and not in the SPA yet.
+After front-end changes, re-run `npm run build` then rebuild the Go binary.
+
+> **npm optional-deps caveat:** on some npm versions the Tailwind/rollup native
+> binaries fail to install. If `npm run build` errors with "Cannot find native
+> binding", install the matching platform packages, e.g. on Intel macOS:
+> `npm i @tailwindcss/oxide-darwin-x64 @rollup/rollup-darwin-x64 lightningcss-darwin-x64`.
+
+The analytics matrix (§5.1) is served by `GET /api/v1/analytics/matrix`
+(dimension × months, share/growth/rank) with `.../export.xlsx` for the workbook
+format.
 
 Resolution ladder: exact → normalized → no-space (tiers 1–2b, at import) → fuzzy
 (tier 3, `resolve`) → AI (tier 4, not yet). Fuzzy has a **digit guard** (X70≠X90,

@@ -32,6 +32,9 @@ export const api = {
 
   stats: () => req('GET', '/stats'),
   confidence: (year?: number) => req('GET', '/analytics/confidence' + (year ? `?year=${year}` : '')),
+  dimensions: () => req('GET', '/analytics/dimensions'),
+  matrix: (qs: string) => req('GET', '/analytics/matrix?' + qs),
+  exportHref: (qs: string) => '/api/v1/analytics/export.xlsx?' + qs,
 
   review: (limit = 100) => req('GET', `/review?limit=${limit}`),
   confirm: (id: number, modelID?: number) => req('POST', `/review/${id}/confirm`, modelID ? { model_id: modelID } : {}),

@@ -7,6 +7,7 @@ import { AppShell } from '@/layout/AppShell'
 import Login from '@/pages/Login'
 import Overview from '@/pages/Overview'
 import Analytics from '@/pages/Analytics'
+import Dashboard from '@/pages/Dashboard'
 import Review from '@/pages/Review'
 import Tree from '@/pages/Tree'
 import Import from '@/pages/Import'
@@ -31,6 +32,7 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/" element={<Protected><AppShell /></Protected>}>
               <Route index element={<Overview />} />
               <Route path="analytics" element={<Analytics />} />
+              <Route path="dashboard" element={<Dashboard />} />
               <Route path="review" element={<Review />} />
               <Route path="tree" element={<Tree />} />
               <Route path="import" element={<Import />} />

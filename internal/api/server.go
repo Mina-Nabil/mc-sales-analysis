@@ -110,6 +110,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/settings", s.auth(s.patchSettings))
 	mux.HandleFunc("GET /api/v1/changes", s.auth(s.changes))
 	mux.HandleFunc("GET /api/v1/analytics/confidence", s.auth(s.confidence))
+	mux.HandleFunc("GET /api/v1/analytics/matrix", s.auth(s.analyticsMatrix))
+	mux.HandleFunc("GET /api/v1/analytics/dimensions", s.auth(s.analyticsDimensions))
+	mux.HandleFunc("GET /api/v1/analytics/export.xlsx", s.auth(s.analyticsExport))
 	mux.HandleFunc("GET /api/v1/stats", s.auth(s.stats))
 
 	mux.HandleFunc("GET /healthz", s.health)

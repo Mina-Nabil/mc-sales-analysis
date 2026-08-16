@@ -136,19 +136,36 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
 - Full analytics matrix (§5.1) is still Phase 2; `/analytics/confidence` and
   `/stats` are the only aggregates exposed so far.
 
-## Front-end (`web/`, React + Vite)
+## Front-end (`web/`, React 19 + TS + Tailwind v4)
 
-- Vite + React (JSX, no TS) SPA. `npm run build` → `web/dist`, embedded via
-  `assets.go` and served by `server serve` (SPA fallback in `spaHandler`).
-  **`web/dist` is committed** so `go build` works without a JS toolchain; rebuild
-  it after front-end changes, then rebuild the Go binary.
-- Same-origin fetch with `credentials:'include'` (`src/api.js`); auth state in
-  `src/auth.jsx`. Pages: Overview, Review (keyboard J/K/Enter/R/A), Tree, Import,
-  Settings, Audit. Raw Arabic shown with `.rtl` (dir=rtl, unicode-bidi:plaintext).
-- Note for browser testing: React controlled inputs need the `form_input` tool
-  (dispatches proper events); plain `type` into them doesn't register. List-item
-  clicks need refs from `read_page filter:all` (they aren't in the interactive tree).
-- Dashboards (§5.1 matrix) + Excel export are Phase 2, not built.
+- Built on the **Vela** admin template (licensed ThemeForest, kept out of git in
+  `theme-template/`). Its `components/ui`, `components/charts` (dependency-free
+  SVG), `lib`, `theme` and `index.css` (design tokens, dark/light) were copied
+  into `web/src`; our own `layout/`, `pages/`, `lib/api.ts`, `auth.tsx` wire them
+  to the Go API. `@/*` path alias → `web/src`.
+- `npm run build` → `web/dist`, embedded via `assets.go`, served by `server serve`
+  (`spaHandler` deep-link fallback). **`web/dist` is committed** so `go build`
+  works without a JS toolchain; rebuild dist then the Go binary after FE changes.
+- Pages: Overview, Analytics (charts), Dashboard (§5.1 matrix + Excel export),
+  Review (J/K/Enter/R/N keys, new-brand/model modals), Tree (edit/merge/detach),
+  Import, Settings, Audit. Raw Arabic uses `dir="rtl"`/`dir="auto"`.
+- Browser-testing notes: React controlled inputs need the `form_input` tool; the
+  stale `vite.config.js` from the first SPA once shadowed `.ts` — only one config.
+- **npm optional-deps bug:** Tailwind/rollup/lightningcss native binaries may not
+  install; add the platform pkg (Intel mac: `@tailwindcss/oxide-darwin-x64`,
+  `@rollup/rollup-darwin-x64`, `lightningcss-darwin-x64`). Doesn't affect `go build`.
+
+## Analytics matrix (`internal/analytics/`, TECH §5.1)
+
+- One parameterized query powers every dashboard: `Matrix(dimension, year,
+  compare_year, filters, months, limit)`. Measure = SUM(volume); dimensions are
+  JOIN-derived with COALESCE→'Unknown'/'No distributor' so shares reconcile.
+- Growth % is **YTD-based** (same month window both years) so a partial current
+  year compares fairly. Shares/ranks/share-point-delta computed in Go from the
+  grouped rows. Distributor dim uses an effective-dated LATERAL join.
+- API: `GET /analytics/matrix`, `/analytics/dimensions`, `/analytics/export.xlsx`
+  (excelize, workbook column layout). Frontend `Dashboard.tsx`: dimension/year/
+  filter selectors, top-N bar chart, the full month matrix, export button.
 
 ## Conventions
 
