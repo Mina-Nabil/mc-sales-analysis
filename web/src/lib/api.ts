@@ -44,10 +44,11 @@ export const api = {
   resolve: () => req('POST', '/resolve', {}),
   newModelForReview: (aliasId: number, m: any) => req('POST', `/review/${aliasId}/new-model`, m),
 
-  brands: () => req('GET', '/brands'),
+  brands: (year?: number | string) => req('GET', '/brands' + (year && year !== 'all' ? `?year=${year}` : '')),
   brandModels: (id: number) => req('GET', `/brands/${id}/models`),
   modelAliases: (id: number) => req('GET', `/models/${id}/aliases`),
-  segments: () => req('GET', '/segments'),
+  segments: (year?: number | string) => req('GET', '/segments' + (year && year !== 'all' ? `?year=${year}` : '')),
+  years: () => req('GET', '/analytics/years'),
   distributors: () => req('GET', '/distributors'),
 
   createBrand: (b: any) => req('POST', '/brands', b),

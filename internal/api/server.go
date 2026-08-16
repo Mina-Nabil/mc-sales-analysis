@@ -112,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/analytics/confidence", s.auth(s.confidence))
 	mux.HandleFunc("GET /api/v1/analytics/matrix", s.auth(s.analyticsMatrix))
 	mux.HandleFunc("GET /api/v1/analytics/dimensions", s.auth(s.analyticsDimensions))
+	mux.HandleFunc("GET /api/v1/analytics/years", s.auth(s.analyticsYears))
 	mux.HandleFunc("GET /api/v1/analytics/export.xlsx", s.auth(s.analyticsExport))
 	mux.HandleFunc("GET /api/v1/stats", s.auth(s.stats))
 

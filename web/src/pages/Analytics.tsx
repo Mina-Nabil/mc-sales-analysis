@@ -5,28 +5,41 @@ import { AreaLineChart, BarChart, DonutChart } from '@/components/charts'
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const PALETTE = ['var(--acc)', 'var(--info)', 'var(--ok)', 'var(--warn)', 'var(--bad)', 'var(--acc-2)', '#c084fc', '#22d3ee']
+const selCls = 'h-9 rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-2.5 text-[13px] text-t0'
 
 export default function Analytics() {
   const [batches, setBatches] = useState<any[]>([])
   const [brands, setBrands] = useState<any[]>([])
   const [segments, setSegments] = useState<any[]>([])
+  const [years, setYears] = useState<number[]>([])
+  const [year, setYear] = useState<'all' | number>('all')
 
   useEffect(() => {
     api.imports().then(setBatches).catch(() => {})
-    api.brands().then(setBrands).catch(() => {})
-    api.segments().then(setSegments).catch(() => {})
+    api.years().then(setYears).catch(() => {})
   }, [])
+  useEffect(() => {
+    api.brands(year).then(setBrands).catch(() => {})
+    api.segments(year).then(setSegments).catch(() => {})
+  }, [year])
 
-  // committed batches → monthly time series (oldest → newest)
+  const label = year === 'all' ? 'All time' : String(year)
+
+  // committed batches → time series. All-time: every period chronologically.
+  // A specific year: that year's 12 months (0 for missing).
   const series = useMemo(() => {
     const committed = batches
       .filter((b) => b.state === 'committed')
       .sort((a, b) => a.period_year * 12 + a.period_month - (b.period_year * 12 + b.period_month))
-    return {
-      data: committed.map((b) => b.volume),
-      labels: committed.map((b) => `${MONTHS[b.period_month]} ${String(b.period_year).slice(2)}`),
+    if (year === 'all') {
+      return { data: committed.map((b) => b.volume), labels: committed.map((b) => `${MONTHS[b.period_month]} ${String(b.period_year).slice(2)}`) }
     }
-  }, [batches])
+    const byMonth = new Map<number, number>()
+    committed.filter((b) => b.period_year === year).forEach((b) => byMonth.set(b.period_month, b.volume))
+    const data: number[] = [], labels: string[] = []
+    for (let m = 1; m <= 12; m++) { data.push(byMonth.get(m) || 0); labels.push(MONTHS[m]) }
+    return { data, labels }
+  }, [batches, year])
 
   const topBrands = useMemo(
     () => brands.filter((b) => b.volume > 0).slice(0, 8).map((b, i) => ({ label: b.name, value: b.volume, color: PALETTE[i % PALETTE.length] })),
@@ -36,46 +49,52 @@ export default function Analytics() {
     () => segments.filter((s) => s.volume > 0).sort((a, b) => b.volume - a.volume).slice(0, 7).map((s, i) => ({ label: s.name, value: s.volume, color: PALETTE[i % PALETTE.length] })),
     [segments],
   )
-
   const latest = series.data[series.data.length - 1] || 0
   const prev = series.data[series.data.length - 2] || 0
   const mom = prev ? ((latest - prev) / prev) * 100 : 0
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Analytics</h1>
-        <p className="mt-1 text-[13px] text-t1">Five years of monthly registrations, brand & segment breakdowns.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Analytics</h1>
+          <p className="mt-1 text-[13px] text-t1">Registrations trend, brand &amp; segment breakdowns.</p>
+        </div>
+        <label className="flex items-center gap-2 text-[12px] font-semibold text-t1">
+          Year
+          <select className={selCls} value={String(year)} onChange={(e) => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+            <option value="all">All time</option>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </label>
       </div>
 
       <Card>
         <CardHeader>
-          <div>
-            <CardTitle>Monthly volume</CardTitle>
-            <CardSubtitle>New-car units per committed period</CardSubtitle>
-          </div>
-          {series.data.length > 1 && (
+          <div><CardTitle>{year === 'all' ? 'Monthly volume' : `Monthly volume · ${year}`}</CardTitle>
+            <CardSubtitle>New-car units per {year === 'all' ? 'committed period' : 'month'}</CardSubtitle></div>
+          {series.data.length > 1 && year === 'all' && (
             <Badge variant={mom >= 0 ? 'success' : 'danger'}>{mom >= 0 ? '↗' : '↘'} {Math.abs(mom).toFixed(1)}% MoM</Badge>
           )}
         </CardHeader>
-        {series.data.length > 1
+        {series.data.some((v) => v > 0)
           ? <AreaLineChart data={series.data} labels={series.labels} height={260} formatValue={(v) => fmt(v)} />
           : <Empty />}
       </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader><div><CardTitle>Top brands</CardTitle><CardSubtitle>By total units (all periods)</CardSubtitle></div></CardHeader>
+          <CardHeader><div><CardTitle>Top brands</CardTitle><CardSubtitle>By units · {label}</CardSubtitle></div></CardHeader>
           {topBrands.length ? <BarChart data={topBrands} height={240} formatValue={(v) => fmt(v)} /> : <Empty />}
         </Card>
         <Card>
-          <CardHeader><div><CardTitle>Segment mix</CardTitle><CardSubtitle>Share of body types</CardSubtitle></div></CardHeader>
+          <CardHeader><div><CardTitle>Segment mix</CardTitle><CardSubtitle>Share of body types · {label}</CardSubtitle></div></CardHeader>
           {segMix.length ? <DonutChart segments={segMix} size={170} /> : <Empty />}
         </Card>
       </div>
 
       <Card>
-        <CardHeader><div><CardTitle>Brand leaderboard</CardTitle><CardSubtitle>Top 12 by volume</CardSubtitle></div></CardHeader>
+        <CardHeader><div><CardTitle>Brand leaderboard</CardTitle><CardSubtitle>Top 12 by volume · {label}</CardSubtitle></div></CardHeader>
         <div className="space-y-2.5">
           {brands.slice(0, 12).map((b, i) => {
             const max = brands[0]?.volume || 1
@@ -97,5 +116,5 @@ export default function Analytics() {
 }
 
 function Empty() {
-  return <div className="grid h-40 place-items-center text-[13px] text-t2">No data yet</div>
+  return <div className="grid h-40 place-items-center text-[13px] text-t2">No data</div>
 }

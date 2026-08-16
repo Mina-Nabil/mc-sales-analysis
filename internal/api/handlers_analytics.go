@@ -32,6 +32,40 @@ func parseMatrixParams(r *http.Request) analytics.Params {
 	return p
 }
 
+// yearFilter returns a WHERE clause and args when a specific ?year is requested;
+// empty/"all" → no filter (all-time). col is the qualified period_year column.
+func yearFilter(r *http.Request, col string) (string, []any) {
+	y := strings.TrimSpace(r.URL.Query().Get("year"))
+	if y == "" || y == "all" {
+		return "", nil
+	}
+	n, err := strconv.Atoi(y)
+	if err != nil {
+		return "", nil
+	}
+	return fmt.Sprintf("WHERE %s = $1", col), []any{n}
+}
+
+// analyticsYears lists the distinct years present in facts, newest first.
+func (s *Server) analyticsYears(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.pool.Query(r.Context(), `SELECT DISTINCT period_year FROM facts ORDER BY period_year DESC`)
+	if err != nil {
+		httpErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+	out := []int{}
+	for rows.Next() {
+		var y int
+		if err := rows.Scan(&y); err != nil {
+			httpErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		out = append(out, y)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
 func (s *Server) analyticsMatrix(w http.ResponseWriter, r *http.Request) {
 	res, err := analytics.Matrix(r.Context(), s.pool, parseMatrixParams(r))
 	if err != nil {

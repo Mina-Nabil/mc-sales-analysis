@@ -168,12 +168,13 @@ func (s *Server) resolve(w http.ResponseWriter, r *http.Request) {
 // ── car tree (read) ─────────────────────────────────────────────────────────
 
 func (s *Server) brands(w http.ResponseWriter, r *http.Request) {
+	yearWhere, args := yearFilter(r, "period_year")
 	rows, err := s.pool.Query(r.Context(), `
 		SELECT b.id, b.name, COALESCE(b.origin,''), b.parent_brand_id, COALESCE(v.vol,0)
 		  FROM brands b
-		  LEFT JOIN (SELECT brand_id, sum(volume) vol FROM facts GROUP BY brand_id) v
+		  LEFT JOIN (SELECT brand_id, sum(volume) vol FROM facts `+yearWhere+` GROUP BY brand_id) v
 		    ON v.brand_id = b.id
-		 ORDER BY COALESCE(v.vol,0) DESC`)
+		 ORDER BY COALESCE(v.vol,0) DESC`, args...)
 	if err != nil {
 		httpErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -274,13 +275,14 @@ func (s *Server) modelAliases(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) segments(w http.ResponseWriter, r *http.Request) {
-	s.simpleList(w, r, `
+	yearWhere, args := yearFilter(r, "f.period_year")
+	s.simpleListArgs(w, r, `
 		SELECT seg.id, seg.name, COALESCE(v.vol,0)
 		  FROM segments seg
 		  LEFT JOIN (SELECT segment_id, sum(volume) vol FROM facts f
-		             JOIN models m ON m.id=f.model_id GROUP BY segment_id) v
+		             JOIN models m ON m.id=f.model_id `+yearWhere+` GROUP BY segment_id) v
 		    ON v.segment_id = seg.id
-		 ORDER BY COALESCE(v.vol,0) DESC`)
+		 ORDER BY COALESCE(v.vol,0) DESC`, args...)
 }
 
 func (s *Server) distributors(w http.ResponseWriter, r *http.Request) {
@@ -288,7 +290,11 @@ func (s *Server) distributors(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) simpleList(w http.ResponseWriter, r *http.Request, q string) {
-	rows, err := s.pool.Query(r.Context(), q)
+	s.simpleListArgs(w, r, q)
+}
+
+func (s *Server) simpleListArgs(w http.ResponseWriter, r *http.Request, q string, args ...any) {
+	rows, err := s.pool.Query(r.Context(), q, args...)
 	if err != nil {
 		httpErr(w, http.StatusInternalServerError, err.Error())
 		return
