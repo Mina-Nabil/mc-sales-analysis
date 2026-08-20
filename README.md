@@ -29,11 +29,21 @@ export DATABASE_URL="postgres://mc:mc@localhost:5433/mcsales?sslmode=disable"
 ./bin/server migrate
 ./bin/server seed
 
-# 4. (optional) migrate five years of history from the source workbook and
-#    run the §8.1 acceptance tests. Needs the .xlsx in the repo root (or set
-#    SOURCE_WORKBOOK). Takes ~90s; imports 377,425 car facts across 60 periods.
+# 4. (optional) load the full fact history, Feb-2021 → Jul-2026.
+#    a) the 2021→Feb-2026 workbook (60 periods, runs the §8.1 acceptance tests):
 ./bin/server migrate-facts
+#    b) the later monthly feeds. Extract the primary feed from each raw archive
+#       in dump/ (see scripts/extract-feeds.py), then load them (idempotent —
+#       already-committed periods are skipped unless --revise):
+python3 scripts/extract-feeds.py          # dump/*.zip → feeds/YYYY-MM.xlsx
+./bin/server load-feeds feeds/            # adds Apr/May/Jun/Jul 2026
+./bin/server resolve                      # fuzzy pass over the new backlog
 ```
+
+> Data note: the monthly feeds overlap the workbook on Jan/Feb 2026 and match it
+> (Feb exact; Jan within 1 unit) — the overlap is a consistency check, and
+> `load-feeds` keeps the existing batch. **March 2026 is absent from the source
+> files**, so the series has that one gap; the analytics handle missing months.
 
 `server seed` is guarded: it refuses to run if the `brands` table is non-empty.
 To reset from scratch:
@@ -51,6 +61,7 @@ docker compose down -v && docker compose up -d
 | `server migrate-facts` | ✅ | one-shot historical migration + §8.1 acceptance tests |
 | `server import <file>` | ✅ | detect + parse + **dry-run** a monthly feed (no writes) |
 | `server import-commit <file> [reason]` | ✅ | commit a monthly feed as a batch (idempotent revision) |
+| `server load-feeds <dir> [--revise]` | ✅ | commit every primary feed in a dir, in period order (skips already-committed) |
 | `server resolve` | ✅ | tier-3 fuzzy pass over the unresolved backlog → auto-links + proposals |
 | `server review list [n]` | ✅ | the review queue, ranked by volume impact |
 | `server review confirm <aliasID> [modelID]` | ✅ | accept an item; re-derives all its facts |

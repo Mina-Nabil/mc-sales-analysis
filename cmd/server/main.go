@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -58,6 +60,8 @@ func run(ctx context.Context, cmd string) error {
 			reason = os.Args[3]
 		}
 		return cmdImport(ctx, true, reason)
+	case "load-feeds":
+		return cmdLoadFeeds(ctx)
 	case "resolve":
 		return cmdResolve(ctx)
 	case "review":
@@ -200,8 +204,8 @@ func printDryRun(r *ingest.DryRunReport) {
 		if r.SwingPct > 30 || r.SwingPct < -30 {
 			flag = "  ⚠ >30% swing — check this is the right file"
 		}
-		fmt.Printf("\n  vs %s: %d → %d  (%+.1f%%)%s\n",
-			r.PrevPeriodLabel, r.PrevPeriodVolume, pf.TotalVolume, r.SwingPct, flag)
+		fmt.Printf("\n  vs %s: %d → %d car units  (%+.1f%%)%s\n",
+			r.PrevPeriodLabel, r.PrevPeriodVolume, r.CarVolume, r.SwingPct, flag)
 	}
 	if len(r.NewBrands) > 0 {
 		fmt.Printf("\n  top unresolved brands (→ review as new brands):\n")
@@ -215,6 +219,80 @@ func printDryRun(r *ingest.DryRunReport) {
 			fmt.Printf("    %6d  %s\n", it.Volume, it.Raw)
 		}
 	}
+}
+
+// cmdLoadFeeds imports every primary-feed .xlsx in a directory, in period order.
+// Periods that already have a committed batch are skipped unless --revise is
+// passed. This makes the full fact history reproducible: migrate-facts then
+// load-feeds <dir>.
+func cmdLoadFeeds(ctx context.Context) error {
+	if len(os.Args) < 3 {
+		return fmt.Errorf("usage: server load-feeds <dir> [--revise]")
+	}
+	dir := os.Args[2]
+	revise := false
+	for _, a := range os.Args[3:] {
+		if a == "--revise" {
+			revise = true
+		}
+	}
+	files, err := filepath.Glob(filepath.Join(dir, "*.xlsx"))
+	if err != nil {
+		return err
+	}
+	if len(files) == 0 {
+		return fmt.Errorf("no .xlsx files in %s", dir)
+	}
+	pool, err := store.Connect(ctx, dbURL())
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	// parse + sort by period so batches load chronologically
+	type feed struct {
+		path string
+		pf   *ingest.ParsedFeed
+	}
+	var feeds []feed
+	for _, f := range files {
+		pf, err := ingest.DetectAndParse(f)
+		if err != nil {
+			fmt.Printf("  skip %s: %v\n", filepath.Base(f), err)
+			continue
+		}
+		feeds = append(feeds, feed{f, pf})
+	}
+	sort.Slice(feeds, func(i, j int) bool {
+		a, b := feeds[i].pf, feeds[j].pf
+		return a.Year*12+a.Month < b.Year*12+b.Month
+	})
+
+	var committed, skipped int
+	for _, fd := range feeds {
+		var exists bool
+		_ = pool.QueryRow(ctx,
+			`SELECT true FROM import_batches WHERE state='committed' AND period_year=$1 AND period_month=$2 LIMIT 1`,
+			fd.pf.Year, fd.pf.Month).Scan(&exists)
+		if exists && !revise {
+			fmt.Printf("  %04d-%02d  already committed — skip\n", fd.pf.Year, fd.pf.Month)
+			skipped++
+			continue
+		}
+		res, err := ingest.Commit(ctx, pool, fd.pf, "load-feeds")
+		if err != nil {
+			return fmt.Errorf("%04d-%02d: %w", fd.pf.Year, fd.pf.Month, err)
+		}
+		verb := "committed"
+		if res.Revised {
+			verb = "revised"
+		}
+		fmt.Printf("  %04d-%02d  %s — %d car units (%d motorcycle units dropped)\n",
+			fd.pf.Year, fd.pf.Month, verb, res.CarVolume, res.DroppedMotoVol)
+		committed++
+	}
+	fmt.Printf("load-feeds done: %d committed, %d skipped.\n", committed, skipped)
+	return nil
 }
 
 func cmdResolve(ctx context.Context) error {
@@ -426,5 +504,5 @@ func floatDefault(s string, def float64) float64 {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: server <migrate|seed|migrate-facts|import|import-commit|resolve|review|serve|seed-admin>")
+	fmt.Fprintln(os.Stderr, "usage: server <migrate|seed|migrate-facts|import|import-commit|load-feeds|resolve|review|serve|seed-admin>")
 }

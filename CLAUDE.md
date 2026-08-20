@@ -75,6 +75,16 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
   units (+6.7% vs Feb, sane — vs +138% if motorcycles were left in).
 - Re-committing a period **supersedes** the prior batch (old → `rolled_back`,
   facts deleted and re-inserted) — idempotent revision (§4.4).
+- **Full history load:** `migrate-facts` (workbook, Feb-2021→Feb-2026) then
+  `load-feeds feeds/` for the later months. Raw monthly archives live in `dump/`
+  (`fwd*.zip`, non-UTF8 Arabic names); `scripts/extract-feeds.py` pulls just the
+  primary feed from each → `feeds/YYYY-MM.xlsx`. `load-feeds` commits them in
+  period order and **skips already-committed periods** unless `--revise`, so it's
+  safe to re-run. Both `dump/` and `feeds/` are git-ignored (local source data).
+- Overlap check (Aug 2026 drop): the new feeds' Jan/Feb/Jul 2026 match the
+  workbook (Feb & Jul exact, Jan within 1 unit). **March 2026 is missing** from
+  the delivered files, so 2026 has months 01,02,04,05,06,07. Current DB span:
+  Feb-2021 → Jul-2026, 64 periods, 628,014 facts / 1,216,143 units.
 - Seed fix: the Phase 0 CSVs HTML-over-escaped `Lynk & Co` as `Lynk &amp; Co`
   (20 rows). The seed loader now `html.UnescapeString`s every cell, so names,
   aliases and normalized keys agree and `LYNK&CO` from the feed resolves.
