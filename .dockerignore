@@ -1,0 +1,16 @@
+# keep the build context small — none of this is needed to compile the binary
+.git
+bin/
+uploads/
+dump/
+feeds/
+mainsource/
+phase0/
+theme-template/
+web/node_modules/
+*.xlsx
+*.zip
+*.md
+.env
+.DS_Store
+infra/

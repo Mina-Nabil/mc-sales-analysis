@@ -457,6 +457,15 @@ func cmdServe() error {
 	}
 	defer pool.Close()
 
+	// Apply schema migrations on startup (idempotent), unless disabled — so a
+	// deploy is just "run the container". The classification seed and admin user
+	// are separate one-off commands.
+	if os.Getenv("SKIP_AUTO_MIGRATE") != "true" {
+		if err := store.Migrate(ctx, pool, mcsales.Migrations); err != nil {
+			return fmt.Errorf("startup migrate: %w", err)
+		}
+	}
+
 	uploadDir := os.Getenv("UPLOAD_DIR")
 	if uploadDir == "" {
 		uploadDir = "./uploads"
