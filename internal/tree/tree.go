@@ -96,7 +96,7 @@ func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, c
 // EditModel updates model attributes. Nothing is stored on facts, so changing a
 // segment/tier re-derives all history automatically via joins; we still record
 // the affected volume in change_log for the impact trail (§6.3).
-func EditModel(ctx context.Context, pool *pgxpool.Pool, id int64, name, carType, tier string, segmentID *int64, actorID int64) error {
+func EditModel(ctx context.Context, pool *pgxpool.Pool, id int64, name, carType, tier, engineType, supply string, segmentID *int64, actorID int64) error {
 	var units int
 	_ = pool.QueryRow(ctx, `SELECT COALESCE(sum(volume),0) FROM facts WHERE model_id=$1`, id).Scan(&units)
 	ct, err := pool.Exec(ctx, `
@@ -105,8 +105,10 @@ func EditModel(ctx context.Context, pool *pgxpool.Pool, id int64, name, carType,
 		  car_type = COALESCE(NULLIF($3,''), car_type),
 		  tier = COALESCE(NULLIF($4,''), tier),
 		  segment_id = COALESCE($5, segment_id),
+		  engine_type = COALESCE(NULLIF($6,''), engine_type),
+		  supply = COALESCE(NULLIF($7,''), supply),
 		  updated_at = now()
-		WHERE id=$1`, id, applyCasing(name), carType, tier, segmentID)
+		WHERE id=$1`, id, applyCasing(name), carType, tier, segmentID, engineType, supply)
 	if err != nil {
 		return err
 	}

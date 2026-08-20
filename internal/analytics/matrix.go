@@ -23,9 +23,9 @@ var dimensions = map[string]string{
 	"segment":      "COALESCE(seg.name,'Unknown')",
 	"tier":         "COALESCE(m.tier,'Unknown')",
 	"car_type":     "COALESCE(m.car_type,'Unknown')",
-	"engine":       "COALESCE(f.engine_type,'Unknown')",
+	"engine":       "COALESCE(m.engine_type,'Unknown')", // model-level spec (§2.8→tree)
 	"origin":       "COALESCE(b.origin,'Unknown')",
-	"supply":       "COALESCE(f.supply,'Unknown')",
+	"supply":       "COALESCE(m.supply,'Unknown')", // model-level spec (§2.8→tree)
 	"region":       "COALESCE(rg.name,'Unknown')",
 	"governorate":  "COALESCE(g.name,'Unknown')",
 	"traffic_unit": "COALESCE(tu.name,'Unknown')",
@@ -39,9 +39,9 @@ var filters = map[string]string{
 	"segment":      "seg.name",
 	"tier":         "m.tier",
 	"car_type":     "m.car_type",
-	"engine":       "f.engine_type",
+	"engine":       "m.engine_type",
 	"origin":       "b.origin",
-	"supply":       "f.supply",
+	"supply":       "m.supply",
 	"region":       "rg.name",
 	"governorate":  "g.name",
 	"traffic_unit": "tu.name",

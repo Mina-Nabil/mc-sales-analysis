@@ -16,7 +16,18 @@ deterministically; only ~64 genuinely-new pairs/month reach the AI.
 
 - **Nothing derived is stored on a fact.** Segment, origin, distributor, region
   come from JOINs to the trees, so fixing one node re-derives all history. (TECH §2.5)
-- **`supply` and `engine_type` are fact-level, never model-level.** (TECH §2.8)
+- **Every spec derives from the car tree, applied to all months by JOIN.** The
+  tree is built once from the "amazing excel" (the 88MB workbook); thereafter the
+  user only uploads monthly *facts* sheets, which carry **no specs at all**
+  (gov/unit/brand/model/status/volume). So `car_type`, `segment`, `tier`,
+  `engine_type`, `supply` are all **model-level**; `origin` is brand-level;
+  `distributor` is (brand, car_type). Facts hold only raw identity + volume +
+  resolved FKs (§2.5). This **reverses TECH §2.8** (which put engine/supply on
+  the fact): the live feed has no engine/supply, so per-period nuance is
+  impossible for new data — model-level is the only thing that applies uniformly.
+  `models.engine_type`/`supply` are auto-derived (dominant historical value,
+  `analytics.RefreshModelDefaults`, run after every fact load) and editable in
+  the tree; editing re-derives every month's facts.
 - **Model aliases are scoped to a brand.** Never resolve a model alias globally. (TECH §2.2)
 - **Distributor is optional** — modelled as absence of a row, never a sentinel.
   NULL distributor is a valid permanent state, never enters the review queue. (TECH §2.4)
@@ -46,6 +57,10 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
 
 ## Fact migration notes (`migrate-facts`, TECH §8)
 
+- The "amazing excel" (`260308_*.xlsx`) lives in `dump/`; `migrate-facts` looks
+  there then repo root, or honours `SOURCE_WORKBOOK`. It backfills each model's
+  `engine_type`/`supply` default (via `RefreshModelDefaults`) after loading, so
+  the tree carries the specs the monthly feeds lack.
 - Reads the "Raw Data" sheet (20 cols, layout in BUSINESS §1.1). Store raw
   identity **untrimmed, numeric coerced to string** — that is what reproduces the
   §8.1 distinct-raw counts (3,779 pairs / 781 brands / 222 units, car rows only).

@@ -4,6 +4,8 @@ import { Card, Button, Badge, Modal } from '@/components/ui'
 
 const CAR_TYPES = ['Passenger', 'Commercial', 'Bus', 'Construction']
 const TIERS = ['Baseline', 'Highline']
+const ENGINES = ['ICE', 'HYBRID', 'BEV', 'REEV', 'Other']
+const SUPPLIES = ['CKD', 'SUP']
 const ORIGINS = ['China', 'Europe', 'Japan', 'Korea', 'USA', 'India', 'Russia', 'UAE', 'Egypt', 'Others']
 const field = 'h-9 w-full rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-3 text-[13px] text-t0 focus:border-acc'
 
@@ -114,16 +116,21 @@ function ModelEditor({ model, segments, onSave, onMerge }: any) {
   const [name, setName] = useState(model.name)
   const [carType, setCarType] = useState(model.car_type || '')
   const [tier, setTier] = useState(model.tier || '')
+  const [engine, setEngine] = useState(model.engine_type || '')
+  const [supply, setSupply] = useState(model.supply || '')
   const [segName, setSegName] = useState(model.segment || '')
   const segId = segments.find((s: any) => s.name === segName)?.id
   return (
     <div className="mb-3 rounded-[var(--radius-vela-md)] border border-line bg-bg-inset p-3">
       <F label="Name"><input className={field} value={name} onChange={(e) => setName(e.target.value)} /></F>
       <F label="Car type"><select className={field} value={carType} onChange={(e) => setCarType(e.target.value)}><option value="">—</option>{CAR_TYPES.map((t) => <option key={t}>{t}</option>)}</select></F>
-      <F label="Tier"><select className={field} value={tier} onChange={(e) => setTier(e.target.value)}><option value="">—</option>{TIERS.map((t) => <option key={t}>{t}</option>)}</select></F>
       <F label="Segment"><select className={field} value={segName} onChange={(e) => setSegName(e.target.value)}><option value="">—</option>{segments.map((s: any) => <option key={s.id}>{s.name}</option>)}</select></F>
-      <div className="mt-2 flex gap-2">
-        <Button size="sm" onClick={() => onSave({ name, car_type: carType, tier, segment_id: segId || null })}>Save</Button>
+      <F label="Tier"><select className={field} value={tier} onChange={(e) => setTier(e.target.value)}><option value="">—</option>{TIERS.map((t) => <option key={t}>{t}</option>)}</select></F>
+      <F label="Engine"><select className={field} value={engine} onChange={(e) => setEngine(e.target.value)}><option value="">—</option>{ENGINES.map((t) => <option key={t}>{t}</option>)}</select></F>
+      <F label="Supply"><select className={field} value={supply} onChange={(e) => setSupply(e.target.value)}><option value="">—</option>{SUPPLIES.map((t) => <option key={t}>{t}</option>)}</select></F>
+      <p className="mb-2 text-[11px] text-t2">Specs apply to every month's facts for this model.</p>
+      <div className="mt-1 flex gap-2">
+        <Button size="sm" onClick={() => onSave({ name, car_type: carType, tier, engine_type: engine, supply, segment_id: segId || null })}>Save</Button>
         <Button size="sm" variant="secondary" onClick={onMerge}>Merge into…</Button>
       </div>
     </div>

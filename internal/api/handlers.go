@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Mina-Nabil/mc-sales-analysis/internal/analytics"
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/auth"
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/ingest"
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/review"
@@ -207,7 +208,8 @@ func (s *Server) brandModels(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.pool.Query(r.Context(), `
 		SELECT m.id, m.name, COALESCE(m.car_type,''), COALESCE(seg.name,''),
-		       COALESCE(m.tier,''), m.status::text, COALESCE(v.vol,0)
+		       COALESCE(m.tier,''), COALESCE(m.engine_type,''), COALESCE(m.supply,''),
+		       m.status::text, COALESCE(v.vol,0)
 		  FROM models m
 		  LEFT JOIN segments seg ON seg.id = m.segment_id
 		  LEFT JOIN (SELECT model_id, sum(volume) vol FROM facts GROUP BY model_id) v
@@ -225,13 +227,15 @@ func (s *Server) brandModels(w http.ResponseWriter, r *http.Request) {
 		CarType string `json:"car_type"`
 		Segment string `json:"segment"`
 		Tier    string `json:"tier"`
+		Engine  string `json:"engine_type"`
+		Supply  string `json:"supply"`
 		Status  string `json:"status"`
 		Volume  int64  `json:"volume"`
 	}
 	out := []model{}
 	for rows.Next() {
 		var m model
-		if err := rows.Scan(&m.ID, &m.Name, &m.CarType, &m.Segment, &m.Tier, &m.Status, &m.Volume); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.CarType, &m.Segment, &m.Tier, &m.Engine, &m.Supply, &m.Status, &m.Volume); err != nil {
 			httpErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -394,6 +398,7 @@ func (s *Server) importCommit(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = analytics.RefreshModelDefaults(r.Context(), s.pool) // keep model specs current
 	writeJSON(w, http.StatusOK, res)
 }
 

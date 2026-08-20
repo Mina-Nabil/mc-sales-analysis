@@ -21,6 +21,7 @@ import (
 	"time"
 
 	mcsales "github.com/Mina-Nabil/mc-sales-analysis"
+	"github.com/Mina-Nabil/mc-sales-analysis/internal/analytics"
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/api"
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/auth"
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/ingest"
@@ -62,6 +63,8 @@ func run(ctx context.Context, cmd string) error {
 		return cmdImport(ctx, true, reason)
 	case "load-feeds":
 		return cmdLoadFeeds(ctx)
+	case "refresh-model-defaults":
+		return cmdRefreshModelDefaults(ctx)
 	case "resolve":
 		return cmdResolve(ctx)
 	case "review":
@@ -122,14 +125,30 @@ func cmdSeed(ctx context.Context) error {
 func cmdMigrateFacts(ctx context.Context) error {
 	wb := os.Getenv("SOURCE_WORKBOOK")
 	if wb == "" {
-		wb = "./260308_Registration Report Dashboard Inc Distributor.xlsx"
+		// The "amazing excel" (full history + all car specs). Look in the common
+		// locations; dump/ is where the raw archives are kept.
+		for _, cand := range []string{
+			"dump/260308_Registration Report Dashboard Inc Distributor.xlsx",
+			"./260308_Registration Report Dashboard Inc Distributor.xlsx",
+		} {
+			if _, err := os.Stat(cand); err == nil {
+				wb = cand
+				break
+			}
+		}
+		if wb == "" {
+			return fmt.Errorf("source workbook not found in dump/ or repo root; set SOURCE_WORKBOOK")
+		}
 	}
 	pool, err := store.Connect(ctx, dbURL())
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
-	return ingest.MigrateFacts(ctx, pool, wb)
+	if err := ingest.MigrateFacts(ctx, pool, wb); err != nil {
+		return err
+	}
+	return analytics.RefreshModelDefaults(ctx, pool)
 }
 
 func cmdImport(ctx context.Context, commit bool, reason string) error {
@@ -291,7 +310,25 @@ func cmdLoadFeeds(ctx context.Context) error {
 			fd.pf.Year, fd.pf.Month, verb, res.CarVolume, res.DroppedMotoVol)
 		committed++
 	}
+	if committed > 0 {
+		if err := analytics.RefreshModelDefaults(ctx, pool); err != nil {
+			return err
+		}
+	}
 	fmt.Printf("load-feeds done: %d committed, %d skipped.\n", committed, skipped)
+	return nil
+}
+
+func cmdRefreshModelDefaults(ctx context.Context) error {
+	pool, err := store.Connect(ctx, dbURL())
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := analytics.RefreshModelDefaults(ctx, pool); err != nil {
+		return err
+	}
+	fmt.Println("model engine/supply defaults refreshed from facts.")
 	return nil
 }
 

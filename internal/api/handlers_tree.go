@@ -51,16 +51,18 @@ func (s *Server) editModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name      string `json:"name"`
-		CarType   string `json:"car_type"`
-		Tier      string `json:"tier"`
-		SegmentID *int64 `json:"segment_id"`
+		Name       string `json:"name"`
+		CarType    string `json:"car_type"`
+		Tier       string `json:"tier"`
+		EngineType string `json:"engine_type"`
+		Supply     string `json:"supply"`
+		SegmentID  *int64 `json:"segment_id"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		httpErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if err := tree.EditModel(r.Context(), s.pool, id, req.Name, req.CarType, req.Tier, req.SegmentID, s.user(r).ID); err != nil {
+	if err := tree.EditModel(r.Context(), s.pool, id, req.Name, req.CarType, req.Tier, req.EngineType, req.Supply, req.SegmentID, s.user(r).ID); err != nil {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}

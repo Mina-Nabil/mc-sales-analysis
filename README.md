@@ -30,7 +30,9 @@ export DATABASE_URL="postgres://mc:mc@localhost:5433/mcsales?sslmode=disable"
 ./bin/server seed
 
 # 4. (optional) load the full fact history, Feb-2021 → Jul-2026.
-#    a) the 2021→Feb-2026 workbook (60 periods, runs the §8.1 acceptance tests):
+#    a) the 2021→Feb-2026 workbook — the "amazing excel", kept in dump/ (or set
+#       SOURCE_WORKBOOK). Runs the §8.1 acceptance tests and derives each model's
+#       engine/supply spec from it:
 ./bin/server migrate-facts
 #    b) the later monthly feeds. Extract the primary feed from each raw archive
 #       in dump/ (see scripts/extract-feeds.py), then load them (idempotent —
@@ -62,6 +64,7 @@ docker compose down -v && docker compose up -d
 | `server import <file>` | ✅ | detect + parse + **dry-run** a monthly feed (no writes) |
 | `server import-commit <file> [reason]` | ✅ | commit a monthly feed as a batch (idempotent revision) |
 | `server load-feeds <dir> [--revise]` | ✅ | commit every primary feed in a dir, in period order (skips already-committed) |
+| `server refresh-model-defaults` | ✅ | recompute model engine/supply defaults from facts (auto-run after loads) |
 | `server resolve` | ✅ | tier-3 fuzzy pass over the unresolved backlog → auto-links + proposals |
 | `server review list [n]` | ✅ | the review queue, ranked by volume impact |
 | `server review confirm <aliasID> [modelID]` | ✅ | accept an item; re-derives all its facts |
