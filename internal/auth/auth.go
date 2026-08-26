@@ -19,9 +19,14 @@ const (
 
 // User is the authenticated principal.
 type User struct {
-	ID    int64  `json:"id"`
-	Email string `json:"email"`
+	ID       int64  `json:"id"`
+	Email    string `json:"email"`
+	IsActive bool   `json:"is_active"`
+	IsSeed   bool   `json:"is_seed"`
 }
+
+// ErrInactive is returned when a real account exists but has been deactivated.
+var ErrInactive = errors.New("account is deactivated")
 
 var ErrInvalidCredentials = errors.New("invalid email or password")
 
@@ -51,8 +56,10 @@ func SeedAdmin(ctx context.Context, pool *pgxpool.Pool, email, password string, 
 		return err
 	}
 	_, err = pool.Exec(ctx, `
-		INSERT INTO users (email, password_hash) VALUES ($1,$2)
-		ON CONFLICT (email) DO UPDATE SET password_hash=EXCLUDED.password_hash, updated_at=now()`,
+		INSERT INTO users (email, password_hash, is_seed) VALUES ($1,$2,true)
+		ON CONFLICT (email) DO UPDATE
+		   SET password_hash=EXCLUDED.password_hash, is_seed=true,
+		       is_active=true, updated_at=now()`,
 		email, hash)
 	return err
 }
@@ -76,8 +83,8 @@ func Login(ctx context.Context, pool *pgxpool.Pool, email, password string) (str
 	var u User
 	var hash string
 	err := pool.QueryRow(ctx,
-		`SELECT id, email, password_hash FROM users WHERE email=$1`, email,
-	).Scan(&u.ID, &u.Email, &hash)
+		`SELECT id, email, password_hash, is_active, is_seed FROM users WHERE email=$1`, email,
+	).Scan(&u.ID, &u.Email, &hash, &u.IsActive, &u.IsSeed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", u, ErrInvalidCredentials
 	}
@@ -87,6 +94,9 @@ func Login(ctx context.Context, pool *pgxpool.Pool, email, password string) (str
 	ok, err := VerifyPassword(password, hash)
 	if err != nil || !ok {
 		return "", u, ErrInvalidCredentials
+	}
+	if !u.IsActive {
+		return "", u, ErrInactive
 	}
 	token, err := newToken()
 	if err != nil {
@@ -110,12 +120,19 @@ func Logout(ctx context.Context, pool *pgxpool.Pool, token string) error {
 // Authenticate resolves a session token to its (unexpired) user.
 func Authenticate(ctx context.Context, pool *pgxpool.Pool, token string) (User, error) {
 	var u User
+	var active bool
 	err := pool.QueryRow(ctx, `
-		SELECT u.id, u.email FROM sessions s JOIN users u ON u.id = s.user_id
+		SELECT u.id, u.email, u.is_active, u.is_seed
+		  FROM sessions s JOIN users u ON u.id = s.user_id
 		 WHERE s.id=$1 AND s.expires_at > now()`, token,
-	).Scan(&u.ID, &u.Email)
+	).Scan(&u.ID, &u.Email, &active, &u.IsSeed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return u, fmt.Errorf("no valid session")
+	}
+	u.IsActive = active
+	// Deactivation takes effect immediately, even on an existing session.
+	if err == nil && !active {
+		return User{}, ErrInactive
 	}
 	return u, err
 }

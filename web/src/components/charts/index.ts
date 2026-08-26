@@ -1,5 +1,6 @@
 export * from "./Sparkline";
 export * from "./AreaLineChart";
+export * from "./MultiLineChart";
 export * from "./DonutChart";
 export * from "./BarChart";
 export * from "./Gauge";

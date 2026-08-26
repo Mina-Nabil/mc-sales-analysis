@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -71,7 +72,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", s.auth(s.logout))
 	mux.HandleFunc("GET /api/v1/auth/me", s.auth(s.me))
+	// user management (all users are admins; no roles)
+	mux.HandleFunc("GET /api/v1/users", s.auth(s.listUsers))
 	mux.HandleFunc("POST /api/v1/users", s.auth(s.createUser))
+	mux.HandleFunc("PATCH /api/v1/users/{id}", s.auth(s.updateUser))
+	mux.HandleFunc("POST /api/v1/users/{id}/active", s.auth(s.setUserActive))
+	mux.HandleFunc("DELETE /api/v1/users/{id}", s.auth(s.deleteUser))
 
 	// review queue
 	mux.HandleFunc("GET /api/v1/review", s.auth(s.reviewList))
@@ -94,6 +100,7 @@ func (s *Server) Handler() http.Handler {
 	// car tree (mutations)
 	mux.HandleFunc("POST /api/v1/brands", s.auth(s.createBrand))
 	mux.HandleFunc("POST /api/v1/models", s.auth(s.createModel))
+	mux.HandleFunc("GET /api/v1/models/{id}", s.auth(s.modelDetail))
 	mux.HandleFunc("PATCH /api/v1/models/{id}", s.auth(s.editModel))
 	mux.HandleFunc("GET /api/v1/models/{id}/merge-preview", s.auth(s.mergePreview))
 	mux.HandleFunc("POST /api/v1/models/{id}/merge", s.auth(s.mergeModels))
@@ -104,6 +111,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/imports", s.auth(s.importList))
 	mux.HandleFunc("GET /api/v1/imports/{id}/dry-run", s.auth(s.importDryRun))
 	mux.HandleFunc("POST /api/v1/imports/{id}/commit", s.auth(s.importCommit))
+
+	// saved analytics views
+	mux.HandleFunc("GET /api/v1/views", s.auth(s.listViews))
+	mux.HandleFunc("POST /api/v1/views", s.auth(s.createView))
+	mux.HandleFunc("PATCH /api/v1/views/{id}", s.auth(s.updateView))
+	mux.HandleFunc("DELETE /api/v1/views/{id}", s.auth(s.deleteView))
 
 	// misc
 	mux.HandleFunc("GET /api/v1/settings", s.auth(s.getSettings))
@@ -134,6 +147,11 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		u, err := auth.Authenticate(r.Context(), s.pool, c.Value)
+		if errors.Is(err, auth.ErrInactive) {
+			// Deactivated accounts are blocked from every request.
+			httpErr(w, http.StatusForbidden, "your account has been deactivated")
+			return
+		}
 		if err != nil {
 			httpErr(w, http.StatusUnauthorized, "session expired or invalid")
 			return

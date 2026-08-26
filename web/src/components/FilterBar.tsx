@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { api } from '@/lib/api'
 
 export const FILTER_DIMS: [string, string][] = [
-  ['brand', 'Brand'], ['model', 'Model'], ['segment', 'Segment'], ['tier', 'Tier'],
+  ['brand', 'Brand'], ['model', 'Model'], ['segment', 'Segment'],
   ['car_type', 'Car type'], ['engine', 'Engine'], ['origin', 'Origin'], ['supply', 'Supply'],
   ['distributor', 'Distributor'], ['region', 'Region'], ['governorate', 'Governorate'], ['traffic_unit', 'Traffic unit'],
 ]
@@ -80,7 +80,7 @@ export function FilterBar() {
   )
 }
 
-function ValuePicker({ dim, selected, onApply, onClose }: { dim: string; selected: string[]; onApply: (v: string[]) => void; onClose: () => void }) {
+export function ValuePicker({ dim, selected, onApply, onClose }: { dim: string; selected: string[]; onApply: (v: string[]) => void; onClose: () => void }) {
   const [opts, setOpts] = useState<string[] | null>(null)
   const [q, setQ] = useState('')
   const [sel, setSel] = useState<string[]>(selected)

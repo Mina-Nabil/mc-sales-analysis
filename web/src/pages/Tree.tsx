@@ -3,7 +3,6 @@ import { api, fmt } from '@/lib/api'
 import { Card, Button, Badge, Modal } from '@/components/ui'
 
 const CAR_TYPES = ['Passenger', 'Commercial', 'Bus', 'Construction']
-const TIERS = ['Baseline', 'Highline']
 const ENGINES = ['ICE', 'HYBRID', 'BEV', 'REEV', 'Other']
 const SUPPLIES = ['CKD', 'SUP']
 const ORIGINS = ['China', 'Europe', 'Japan', 'Korea', 'USA', 'India', 'Russia', 'UAE', 'Egypt', 'Others']
@@ -56,7 +55,7 @@ export default function Tree() {
         <Card padding="sm" className="max-h-[72vh] overflow-auto">
           <Head>{brand ? `${brand.name} — models` : 'Select a brand'}</Head>
           <List items={models} active={model?.id} onPick={pickModel} render={(m) => (
-            <><span className="min-w-0 truncate text-[13px] text-t0">{m.name} {m.segment && <Badge variant="neutral">{m.segment}</Badge>} {m.tier && <Badge variant="accent">{m.tier}</Badge>}</span>
+            <><span className="min-w-0 truncate text-[13px] text-t0">{m.name} {m.segment && <Badge variant="neutral">{m.segment}</Badge>}</span>
               <span className="text-[12px] text-t1">{fmt(m.volume)}</span></>
           )} />
         </Card>
@@ -115,7 +114,6 @@ function List({ items, active, onPick, render }: any) {
 function ModelEditor({ model, segments, onSave, onMerge }: any) {
   const [name, setName] = useState(model.name)
   const [carType, setCarType] = useState(model.car_type || '')
-  const [tier, setTier] = useState(model.tier || '')
   const [engine, setEngine] = useState(model.engine_type || '')
   const [supply, setSupply] = useState(model.supply || '')
   const [segName, setSegName] = useState(model.segment || '')
@@ -125,12 +123,11 @@ function ModelEditor({ model, segments, onSave, onMerge }: any) {
       <F label="Name"><input className={field} value={name} onChange={(e) => setName(e.target.value)} /></F>
       <F label="Car type"><select className={field} value={carType} onChange={(e) => setCarType(e.target.value)}><option value="">—</option>{CAR_TYPES.map((t) => <option key={t}>{t}</option>)}</select></F>
       <F label="Segment"><select className={field} value={segName} onChange={(e) => setSegName(e.target.value)}><option value="">—</option>{segments.map((s: any) => <option key={s.id}>{s.name}</option>)}</select></F>
-      <F label="Tier"><select className={field} value={tier} onChange={(e) => setTier(e.target.value)}><option value="">—</option>{TIERS.map((t) => <option key={t}>{t}</option>)}</select></F>
       <F label="Engine"><select className={field} value={engine} onChange={(e) => setEngine(e.target.value)}><option value="">—</option>{ENGINES.map((t) => <option key={t}>{t}</option>)}</select></F>
       <F label="Supply"><select className={field} value={supply} onChange={(e) => setSupply(e.target.value)}><option value="">—</option>{SUPPLIES.map((t) => <option key={t}>{t}</option>)}</select></F>
       <p className="mb-2 text-[11px] text-t2">Specs apply to every month's facts for this model.</p>
       <div className="mt-1 flex gap-2">
-        <Button size="sm" onClick={() => onSave({ name, car_type: carType, tier, engine_type: engine, supply, segment_id: segId || null })}>Save</Button>
+        <Button size="sm" onClick={() => onSave({ name, car_type: carType, engine_type: engine, supply, segment_id: segId || null })}>Save</Button>
         <Button size="sm" variant="secondary" onClick={onMerge}>Merge into…</Button>
       </div>
     </div>
@@ -155,15 +152,14 @@ function NewBrandModal({ open, brands, onClose, onSubmit }: any) {
 }
 
 function NewModelModal({ open, brand, segments, onClose, onSubmit }: any) {
-  const [name, setName] = useState(''); const [carType, setCarType] = useState('Passenger'); const [tier, setTier] = useState('Baseline'); const [seg, setSeg] = useState('')
-  useEffect(() => { if (open) { setName(''); setCarType('Passenger'); setTier('Baseline'); setSeg('') } }, [open])
+  const [name, setName] = useState(''); const [carType, setCarType] = useState('Passenger'); const [seg, setSeg] = useState('')
+  useEffect(() => { if (open) { setName(''); setCarType('Passenger'); setSeg('') } }, [open])
   if (!brand) return null
   return (
     <Modal open={open} onClose={onClose} title={`New model under ${brand.name}`}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name} onClick={() => onSubmit({ name, car_type: carType, tier, segment_id: seg ? Number(seg) : null })}>Create</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name} onClick={() => onSubmit({ name, car_type: carType, segment_id: seg ? Number(seg) : null })}>Create</Button></>}>
       <F label="Name"><input className={field} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></F>
       <F label="Car type"><select className={field} value={carType} onChange={(e) => setCarType(e.target.value)}>{CAR_TYPES.map((t) => <option key={t}>{t}</option>)}</select></F>
-      <F label="Tier"><select className={field} value={tier} onChange={(e) => setTier(e.target.value)}>{TIERS.map((t) => <option key={t}>{t}</option>)}</select></F>
       <F label="Segment"><select className={field} value={seg} onChange={(e) => setSeg(e.target.value)}><option value="">—</option>{segments.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></F>
     </Modal>
   )

@@ -1,9 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/cn'
+import { useViews, viewKind } from '@/lib/views'
 
 const NAV: [string, string, string, boolean?][] = [
   ['/', 'Overview', 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', true],
   ['/analytics', 'Analytics', 'M3 3v18h18M7 14l3-3 3 3 5-6'],
+  ['/models', 'Model Comparison', 'M3 17l6-6 4 4 8-8M3 21h18'],
   ['/dashboard', 'Dashboard', 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z'],
   ['/review', 'Review queue', 'M22 12h-6l-2 3h-4l-2-3H2M5 5h14l3 7v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-6z'],
   ['/tree', 'Car tree', 'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5'],
@@ -19,6 +21,7 @@ const linkActive = 'bg-acc-soft text-acc!'
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   // Carry the active filter query across pages so filters stay global (§5.3).
   const { search } = useLocation()
+  const { views } = useViews()
   const carried = new URLSearchParams(search)
   for (const k of [...carried.keys()]) if (!k.startsWith('filter.')) carried.delete(k)
   const filterSearch = carried.toString()
@@ -39,13 +42,30 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3.5 pb-3.5">
         <p className="px-2.5 pb-1.5 pt-1 text-[10.5px] font-bold uppercase tracking-wider text-t2">Menu</p>
         {NAV.map(([to, label, d, end]) => (
-          <NavLink key={to} to={{ pathname: to, search: filterSearch }} end={!!end} onClick={onNavigate}
-            className={({ isActive }) => cn(linkBase, isActive && linkActive)}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d={d} />
-            </svg>
-            <span className="flex-1">{label}</span>
-          </NavLink>
+          <div key={to}>
+            <NavLink to={{ pathname: to, search: filterSearch }} end={!!end} onClick={onNavigate}
+              className={({ isActive }) => cn(linkBase, isActive && linkActive)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <path d={d} />
+              </svg>
+              <span className="flex-1">{label}</span>
+            </NavLink>
+            {(to === '/analytics' || to === '/models') && (() => {
+              const kind = to === '/models' ? 'model' : 'brand'
+              const mine = views.filter((v) => viewKind(v) === kind)
+              if (!mine.length) return null
+              return (
+                <div className="mb-1 ml-[26px] mt-0.5 space-y-0.5 border-l border-line pl-2.5">
+                  {mine.map((v) => (
+                    <NavLink key={v.id} to={`${to}/view/${v.id}`} onClick={onNavigate}
+                      className={({ isActive }) => cn('block truncate rounded-[9px] px-2.5 py-1.5 text-[12.5px] font-medium text-t1 transition-colors hover:bg-bg-3 hover:text-t0', isActive && 'bg-acc-soft text-acc!')}>
+                      {v.name}
+                    </NavLink>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
         ))}
       </nav>
 

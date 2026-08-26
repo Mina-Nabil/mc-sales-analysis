@@ -21,7 +21,6 @@ var dimensions = map[string]string{
 	"brand":        "COALESCE(b.name,'Unknown')",
 	"model":        "CASE WHEN m.id IS NULL THEN 'Unknown' ELSE b.name||' '||m.name END",
 	"segment":      "COALESCE(seg.name,'Unknown')",
-	"tier":         "COALESCE(m.tier,'Unknown')",
 	"car_type":     "COALESCE(m.car_type,'Unknown')",
 	"engine":       "COALESCE(m.engine_type,'Unknown')", // model-level spec (§2.8→tree)
 	"origin":       "COALESCE(b.origin,'Unknown')",
@@ -34,10 +33,14 @@ var dimensions = map[string]string{
 
 // filter key → SQL expression compared with = ANY($n).
 var filters = map[string]string{
-	"brand":        "b.name",
-	"model":        "m.name",
+	"brand": "b.name",
+	// model is matched by NAME and is therefore not brand-scoped (models are only
+	// UNIQUE (brand_id, name)) — pair it with a brand filter, or prefer model_id.
+	"model": "m.name",
+	// model_id is the unambiguous, comma-safe way to pin one exact model; it also
+	// hits the facts(model_id, period_year, period_month) index.
+	"model_id":     "f.model_id::text",
 	"segment":      "seg.name",
-	"tier":         "m.tier",
 	"car_type":     "m.car_type",
 	"engine":       "m.engine_type",
 	"origin":       "b.origin",

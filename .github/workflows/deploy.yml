@@ -1,0 +1,84 @@
+# CI/CD — gated on the correctness-core tests (§11.3), then builds the ARM64
+# image to ECR and syncs the SPA to S3 + invalidates CloudFront.
+#
+# Auth is GitHub OIDC → an AWS role (no long-lived keys). Create the role with a
+# trust policy for token.actions.githubusercontent.com and set these repo vars:
+#   vars.AWS_ROLE_ARN, vars.AWS_REGION (eu-central-1),
+#   vars.ECR_REPOSITORY, vars.SPA_BUCKET, vars.CLOUDFRONT_DISTRIBUTION_ID,
+#   vars.ECS_CLUSTER, vars.ECS_SERVICE
+# The four resource names come straight from `terraform output`.
+
+name: deploy
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  id-token: write # for OIDC
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - run: go vet ./...
+      - run: go test ./... # normalization + fuzzy table tests gate the build (§9)
+
+  build-and-deploy:
+    needs: test
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # ── API image → ECR (linux/arm64, Graviton) ──────────────────────────
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          provenance: false
+
+      - name: Roll the ECS service to the new image
+        run: |
+          aws ecs update-service \
+            --cluster "${{ vars.ECS_CLUSTER }}" \
+            --service "${{ vars.ECS_SERVICE }}" \
+            --force-new-deployment
+
+      # ── SPA → S3 + CloudFront invalidation ───────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Sync SPA to S3
+        run: |
+          # content-hashed assets: long cache; index.html: no-cache
+          aws s3 sync web/dist "s3://${{ vars.SPA_BUCKET }}" --delete \
+            --cache-control "public,max-age=31536000,immutable" --exclude index.html
+          aws s3 cp web/dist/index.html "s3://${{ vars.SPA_BUCKET }}/index.html" \
+            --cache-control "no-cache"
+      - name: Invalidate CloudFront
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}" \
+            --paths "/index.html" "/"

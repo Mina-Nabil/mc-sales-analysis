@@ -76,16 +76,16 @@ func CreateBrand(ctx context.Context, pool *pgxpool.Pool, name, origin string, p
 }
 
 // CreateModel adds a new model under a brand. Returns its id.
-func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, carType string, segmentID *int64, tier string, actorID int64) (int64, string, error) {
+func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, carType string, segmentID *int64, actorID int64) (int64, string, error) {
 	name = applyCasing(name)
 	if name == "" {
 		return 0, "", fmt.Errorf("model name required")
 	}
 	var id int64
 	err := pool.QueryRow(ctx, `
-		INSERT INTO models (brand_id, name, car_type, segment_id, tier, status)
+		INSERT INTO models (brand_id, name, car_type, segment_id, status)
 		VALUES ($1,$2,$3,$4,$5,'confirmed') RETURNING id`,
-		brandID, name, nullIf(carType), segmentID, nullIf(tier)).Scan(&id)
+		brandID, name, nullIf(carType), segmentID).Scan(&id)
 	if err != nil {
 		return 0, "", fmt.Errorf("create model: %w", err)
 	}
@@ -94,21 +94,20 @@ func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, c
 }
 
 // EditModel updates model attributes. Nothing is stored on facts, so changing a
-// segment/tier re-derives all history automatically via joins; we still record
+// segment re-derives all history automatically via joins; we still record
 // the affected volume in change_log for the impact trail (§6.3).
-func EditModel(ctx context.Context, pool *pgxpool.Pool, id int64, name, carType, tier, engineType, supply string, segmentID *int64, actorID int64) error {
+func EditModel(ctx context.Context, pool *pgxpool.Pool, id int64, name, carType, engineType, supply string, segmentID *int64, actorID int64) error {
 	var units int
 	_ = pool.QueryRow(ctx, `SELECT COALESCE(sum(volume),0) FROM facts WHERE model_id=$1`, id).Scan(&units)
 	ct, err := pool.Exec(ctx, `
 		UPDATE models SET
 		  name = COALESCE(NULLIF($2,''), name),
 		  car_type = COALESCE(NULLIF($3,''), car_type),
-		  tier = COALESCE(NULLIF($4,''), tier),
-		  segment_id = COALESCE($5, segment_id),
-		  engine_type = COALESCE(NULLIF($6,''), engine_type),
-		  supply = COALESCE(NULLIF($7,''), supply),
+		  segment_id = COALESCE($4, segment_id),
+		  engine_type = COALESCE(NULLIF($5,''), engine_type),
+		  supply = COALESCE(NULLIF($6,''), supply),
 		  updated_at = now()
-		WHERE id=$1`, id, applyCasing(name), carType, tier, segmentID, engineType, supply)
+		WHERE id=$1`, id, applyCasing(name), carType, segmentID, engineType, supply)
 	if err != nil {
 		return err
 	}
@@ -285,7 +284,7 @@ func ResolveBrand(ctx context.Context, pool *pgxpool.Pool, rawBrand string, bran
 
 // CreateModelForReview creates a model and confirms a review alias to it,
 // re-deriving that alias's facts. Closes a "new model" review item in one step.
-func CreateModelForReview(ctx context.Context, pool *pgxpool.Pool, aliasID int64, name, carType string, segmentID *int64, tier string, actorID int64) (int64, int, error) {
+func CreateModelForReview(ctx context.Context, pool *pgxpool.Pool, aliasID int64, name, carType string, segmentID *int64, actorID int64) (int64, int, error) {
 	var brandID int64
 	var raw, status string
 	if err := pool.QueryRow(ctx,
@@ -295,7 +294,7 @@ func CreateModelForReview(ctx context.Context, pool *pgxpool.Pool, aliasID int64
 	if status != "needs_review" {
 		return 0, 0, fmt.Errorf("item was already %s — refresh the queue", status)
 	}
-	modelID, _, err := CreateModel(ctx, pool, brandID, name, carType, segmentID, tier, actorID)
+	modelID, _, err := CreateModel(ctx, pool, brandID, name, carType, segmentID, actorID)
 	if err != nil {
 		return 0, 0, err
 	}

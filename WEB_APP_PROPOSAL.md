@@ -114,6 +114,13 @@ The cost driver here is **fixed always-on infrastructure serving a workload that
 
 **Decision: Option A− at ~$56/month (Frankfurt), ~$57 all-in with AI.** Lightsail would have saved a further $38/month, but standard ECS + RDS primitives produce more reliable agent-generated infrastructure-as-code and are easier to hand to a different engineer later. That difference is worth $38/month.
 
+> **Edge redesign (2026-08-23):** the ingress layer changed — Cloudflare is dropped in
+> favour of **CloudFront** (TLS at the edge, Shield Standard) with the **SPA split to S3**
+> and the **API on the Fargate task** reached through a **t4g.nano Caddy proxy** (the stable
+> CloudFront origin, replacing the Tunnel; no ALB). Net cost ~$56–60/month Frankfurt —
+> roughly cost-neutral — for removal of the Cloudflare dependency plus a real CDN and
+> independent front-end deploys. See `TECHNICAL_REQUIREMENTS.md` §11.
+
 ---
 
 **Option A− — right-sized managed AWS (SELECTED)**

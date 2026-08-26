@@ -30,10 +30,22 @@ type ParsedFeed struct {
 
 var periodRe = regexp.MustCompile(`من\s*(\d{4})/(\d{1,2})/(\d{1,2})`)
 
-// DetectAndParse identifies the file's signature/role/period and parses it.
+// DetectAndParse identifies the file's signature/role/period and parses it,
+// taking the period from the sheet title (the traffic-authority `من YYYY/MM/DD`
+// header). Used by the CLI import path.
 // Only the primary feed (brands_models_by_status) is implemented here; other
 // signatures return a clear "unsupported" error rather than mis-parsing (§4.1).
 func DetectAndParse(path string) (*ParsedFeed, error) {
+	return DetectAndParseWithPeriod(path, 0, 0)
+}
+
+// DetectAndParseWithPeriod is DetectAndParse with an explicit period override:
+// when yearOverride/monthOverride are both non-zero they replace the period
+// detected from the sheet title. This lets the web UI let the user pick the
+// month/year (or derive it from the file name) rather than depending on the
+// title cell. When no override is given and the title carries no detectable
+// period, it errors as before.
+func DetectAndParseWithPeriod(path string, yearOverride, monthOverride int) (*ParsedFeed, error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
@@ -57,8 +69,13 @@ func DetectAndParse(path string) (*ParsedFeed, error) {
 	}
 
 	yr, mo, err := detectPeriod(title)
-	if err != nil {
+	if yearOverride > 0 && monthOverride > 0 {
+		yr, mo = yearOverride, monthOverride // caller-supplied period wins
+	} else if err != nil {
 		return nil, err
+	}
+	if yr < 2000 || yr > 2100 || mo < 1 || mo > 12 {
+		return nil, fmt.Errorf("invalid period %04d-%02d", yr, mo)
 	}
 
 	pf := &ParsedFeed{

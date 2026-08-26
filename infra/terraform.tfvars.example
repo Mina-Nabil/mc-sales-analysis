@@ -1,0 +1,18 @@
+# Copy to terraform.tfvars and fill in. Do NOT put admin_password here —
+# export it as TF_VAR_admin_password instead.
+
+profile         = "mc_profile"
+region          = "eu-central-1"
+env             = "prod"
+
+domain_name     = "sales.motorcity.example"
+route53_zone_id = "Z0123456789ABCDEFGHIJ"
+
+alarm_email     = "ops@motorcity.example"
+admin_email     = "admin@motorcity.local"
+
+# image_tag     = "latest"   # CI overrides per build
+
+# Trim lever (§11): false drops the t4g.nano proxy (~$50/mo) at the cost of a
+# brief 5xx window during Fargate task recycles.
+use_proxy       = true

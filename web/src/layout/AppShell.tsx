@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar, SidebarContent } from './Sidebar'
 import { Topbar } from './Topbar'
+import { LoadingBar } from '@/components/ui'
 
 export function AppShell() {
   const [navOpen, setNavOpen] = useState(false)
@@ -15,6 +16,7 @@ export function AppShell() {
 
   return (
     <div className="flex min-h-screen w-full bg-bg-0 text-t0">
+      <LoadingBar />
       <Sidebar />
 
       {/* mobile drawer */}

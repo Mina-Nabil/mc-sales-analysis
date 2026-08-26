@@ -164,9 +164,9 @@ func Load(ctx context.Context, pool *pgxpool.Pool, seeds fs.FS) (Counts, error) 
 		}
 		var id int64
 		if err := tx.QueryRow(ctx,
-			`INSERT INTO models (brand_id, name, car_type, segment_id, tier, status)
+			`INSERT INTO models (brand_id, name, car_type, segment_id, status)
 			 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-			bid, r["model"], nullIf(r["car_type"], ""), segIDVal, nullIf(r["tier"], ""), status(r["status"]),
+			bid, r["model"], nullIf(r["car_type"], ""), segIDVal, status(r["status"]),
 		).Scan(&id); err != nil {
 			return c, fmt.Errorf("model %q/%q: %w", r["brand"], r["model"], err)
 		}

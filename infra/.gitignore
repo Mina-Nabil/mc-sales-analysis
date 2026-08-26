@@ -1,0 +1,12 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+
+# Operator-specific / secret inputs
+terraform.tfvars
+*.auto.tfvars
+backend.hcl
+.env

@@ -10,6 +10,21 @@ export class ApiError extends Error {
   }
 }
 
+// ── In-flight request tracking (drives the global loading bar) ───────────────
+// Every API call passes through req(), so a single counter here lets the UI show
+// a top progress bar whenever any page or action is waiting on the server.
+let inFlight = 0
+const loadingListeners = new Set<(n: number) => void>()
+function bump(delta: number) {
+  inFlight += delta
+  loadingListeners.forEach((l) => l(inFlight))
+}
+export function onLoadingChange(fn: (n: number) => void): () => void {
+  loadingListeners.add(fn)
+  fn(inFlight)
+  return () => { loadingListeners.delete(fn) }
+}
+
 async function req(method: string, path: string, body?: any) {
   const init: RequestInit = { method, credentials: 'include', headers: {} }
   if (body instanceof FormData) {
@@ -18,11 +33,16 @@ async function req(method: string, path: string, body?: any) {
     ;(init.headers as Record<string, string>)['Content-Type'] = 'application/json'
     init.body = JSON.stringify(body)
   }
-  const res = await fetch('/api/v1' + path, init)
-  const text = await res.text()
-  const data = text ? JSON.parse(text) : null
-  if (!res.ok) throw new ApiError((data && data.error) || res.statusText, res.status, data)
-  return data
+  bump(1)
+  try {
+    const res = await fetch('/api/v1' + path, init)
+    const text = await res.text()
+    const data = text ? JSON.parse(text) : null
+    if (!res.ok) throw new ApiError((data && data.error) || res.statusText, res.status, data)
+    return data
+  } finally {
+    bump(-1)
+  }
 }
 
 export const api = {
@@ -49,6 +69,7 @@ export const api = {
 
   brands: (year?: number | string) => req('GET', '/brands' + (year && year !== 'all' ? `?year=${year}` : '')),
   brandModels: (id: number) => req('GET', `/brands/${id}/models`),
+  model: (id: number) => req('GET', `/models/${id}`),
   modelAliases: (id: number) => req('GET', `/models/${id}/aliases`),
   segments: (year?: number | string) => req('GET', '/segments' + (year && year !== 'all' ? `?year=${year}` : '')),
   years: () => req('GET', '/analytics/years'),
@@ -65,13 +86,27 @@ export const api = {
   resolveBrand: (body: any) => req('POST', '/review/brands/resolve', body),
 
   imports: () => req('GET', '/imports'),
-  upload: (file: File) => {
+  upload: (file: File, year?: number, month?: number) => {
     const fd = new FormData()
     fd.append('file', file)
+    if (year && month) { fd.append('period_year', String(year)); fd.append('period_month', String(month)) }
     return req('POST', '/imports', fd)
   },
-  dryRun: (token: string) => req('GET', `/imports/${token}/dry-run`),
-  commit: (token: string, reason: string) => req('POST', `/imports/${token}/commit`, { reason }),
+  dryRun: (token: string, year?: number, month?: number) =>
+    req('GET', `/imports/${token}/dry-run` + (year && month ? `?year=${year}&month=${month}` : '')),
+  commit: (token: string, reason: string, year?: number, month?: number) =>
+    req('POST', `/imports/${token}/commit`, { reason, period_year: year, period_month: month }),
+
+  views: () => req('GET', '/views'),
+  createView: (name: string, config: any) => req('POST', '/views', { name, config }),
+  updateView: (id: number, patch: { name?: string; config?: any }) => req('PATCH', `/views/${id}`, patch),
+  deleteView: (id: number) => req('DELETE', `/views/${id}`),
+
+  users: () => req('GET', '/users'),
+  createUser: (email: string, password: string) => req('POST', '/users', { Email: email, Password: password }),
+  updateUser: (id: number, patch: { email?: string; password?: string }) => req('PATCH', `/users/${id}`, patch),
+  setUserActive: (id: number, active: boolean) => req('POST', `/users/${id}/active`, { active }),
+  deleteUser: (id: number) => req('DELETE', `/users/${id}`),
 
   settings: () => req('GET', '/settings'),
   saveSettings: (obj: any) => req('PATCH', '/settings', obj),

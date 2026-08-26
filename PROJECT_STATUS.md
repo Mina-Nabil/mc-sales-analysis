@@ -119,24 +119,31 @@ segments in use · 2,825 aliases, all in `seed/*.csv`, loaded by `server seed`.
 ## Upcoming steps (next session, prioritized)
 
 ### 1. Infrastructure-as-Code — Terraform, Option A− (the immediate next)
-Target (decided in `phase0/READINESS.md` §2 / TECH §11): AWS `eu-central-1`, ECS
-Fargate (1 task, 0.5 vCPU/1 GB, ARM64), RDS `db.t4g.small` Single-AZ, **Cloudflare
-Tunnel (no ALB)**, S3, Bedrock via IAM role + VPC endpoint. **No** NAT gateway,
-**no** ALB, **no** Multi-AZ (§11.2). Scaffold `/infra`:
-- state backend (S3 + DynamoDB lock) — bootstrap first (§11.1)
-- VPC + public subnets (tasks in public subnet, tight SG; VPC endpoints for S3 +
-  Bedrock so no NAT)
-- ECR repo + RDS + Secrets/SSM for `DATABASE_URL`
-- ECS cluster/service/task (image = this Dockerfile; `serve` auto-migrates)
-- Cloudflare Tunnel (cloudflared as a sidecar or separate task) → the app on :8080
-- billing alarm at $115/mo (§11.1)
+**Edge redesign (2026-08-23): Cloudflare dropped, CloudFront in, SPA split to S3.**
+Target (TECH §11): AWS `eu-central-1`, ECS Fargate (1 task, 0.5 vCPU/1 GB, ARM64),
+RDS `db.t4g.small` Single-AZ, S3, Bedrock via IAM role + VPC endpoint. **No** NAT
+gateway, **no** ALB, **no** Multi-AZ (§11.2). Ingress is **CloudFront** → S3 (SPA,
+`/*`) + a **t4g.nano Caddy proxy** (EIP, only public origin) → Fargate (`/api/*`),
+with the task in **Cloud Map** so its ephemeral IP doesn't break the origin.
+~$56–60/mo Frankfurt. Scaffold `/infra` (module layout in
+`/plans/i-want-to-rethink-greedy-adleman.md`):
+- `bootstrap/` state backend (S3 + DynamoDB lock) — first (§11.1)
+- `network/` VPC + public subnets (tasks in public subnet, tight SG; VPC endpoints
+  for S3 + Bedrock so no NAT); Cloud Map private namespace
+- `data/` RDS + Secrets/SSM for `DATABASE_URL`
+- `compute/` ECR + ECS cluster/service/task (image = this Dockerfile; `serve`
+  auto-migrates), registered in Cloud Map
+- `edge-proxy/` t4g.nano + EIP + Caddy (reverse-proxy → `api.mc.local:8080`)
+- `edge-cdn/` S3 SPA bucket (OAC) + ACM (us-east-1) + Route53 + CloudFront
+- `observability/` billing alarm at $115/mo (§11.1), CW logs 7-day
 
 **Inputs needed from you** (operator-specific; some are secrets — set on the
 machine, don't paste here):
 - AWS **named profile** + account ID (region `eu-central-1` already fixed)
-- Cloudflare **hostname/domain** + a **tunnel token** (created in your CF account)
+- A **domain/hostname** for the app + which **Route53 hosted zone** to use
 - Confirm **Bedrock Claude model access** is enabled in the account
-- Whether to include a **CI workflow** (GitHub Actions → buildx arm64 → ECR) now
+- Whether to include a **CI workflow** (GitHub Actions → buildx arm64 → ECR +
+  `web/dist` → S3 sync + CloudFront invalidation) now
 
 ### 2. Production data bootstrap
 Seed CSVs are embedded (work anywhere), but the ~628k facts need the source Excel

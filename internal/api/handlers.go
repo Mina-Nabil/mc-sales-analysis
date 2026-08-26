@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/analytics"
@@ -27,6 +29,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	token, u, err := auth.Login(r.Context(), s.pool, req.Email, req.Password)
 	if errors.Is(err, auth.ErrInvalidCredentials) {
 		httpErr(w, http.StatusUnauthorized, "invalid email or password")
+		return
+	}
+	if errors.Is(err, auth.ErrInactive) {
+		httpErr(w, http.StatusForbidden, "your account has been deactivated")
 		return
 	}
 	if err != nil {
@@ -53,19 +59,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.user(r))
 }
 
-func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Email, Password string }
-	if err := readJSON(r, &req); err != nil || req.Email == "" || len(req.Password) < 8 {
-		httpErr(w, http.StatusBadRequest, "email and password (≥8 chars) required")
-		return
-	}
-	u, err := auth.CreateUser(r.Context(), s.pool, req.Email, req.Password)
-	if err != nil {
-		httpErr(w, http.StatusConflict, "could not create user (email may already exist)")
-		return
-	}
-	writeJSON(w, http.StatusCreated, u)
-}
+// createUser lives in handlers_users.go with the rest of user management.
 
 // ── review queue ────────────────────────────────────────────────────────────
 
@@ -208,7 +202,7 @@ func (s *Server) brandModels(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.pool.Query(r.Context(), `
 		SELECT m.id, m.name, COALESCE(m.car_type,''), COALESCE(seg.name,''),
-		       COALESCE(m.tier,''), COALESCE(m.engine_type,''), COALESCE(m.supply,''),
+		       COALESCE(m.engine_type,''), COALESCE(m.supply,''),
 		       m.status::text, COALESCE(v.vol,0)
 		  FROM models m
 		  LEFT JOIN segments seg ON seg.id = m.segment_id
@@ -226,7 +220,6 @@ func (s *Server) brandModels(w http.ResponseWriter, r *http.Request) {
 		Name    string `json:"name"`
 		CarType string `json:"car_type"`
 		Segment string `json:"segment"`
-		Tier    string `json:"tier"`
 		Engine  string `json:"engine_type"`
 		Supply  string `json:"supply"`
 		Status  string `json:"status"`
@@ -235,7 +228,7 @@ func (s *Server) brandModels(w http.ResponseWriter, r *http.Request) {
 	out := []model{}
 	for rows.Next() {
 		var m model
-		if err := rows.Scan(&m.ID, &m.Name, &m.CarType, &m.Segment, &m.Tier, &m.Engine, &m.Supply, &m.Status, &m.Volume); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.CarType, &m.Segment, &m.Engine, &m.Supply, &m.Status, &m.Volume); err != nil {
 			httpErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -353,7 +346,8 @@ func (s *Server) importUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Close()
 
-	pf, err := ingest.DetectAndParse(dst)
+	yr, mo := periodOverride(r.FormValue("period_year"), r.FormValue("period_month"))
+	pf, err := ingest.DetectAndParseWithPeriod(dst, yr, mo)
 	if err != nil {
 		_ = os.Remove(dst)
 		httpErr(w, http.StatusUnprocessableEntity, err.Error())
@@ -372,7 +366,8 @@ func (s *Server) importUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) importDryRun(w http.ResponseWriter, r *http.Request) {
-	pf, ok := s.loadUpload(w, r)
+	yr, mo := periodOverride(r.URL.Query().Get("year"), r.URL.Query().Get("month"))
+	pf, ok := s.loadUpload(w, r, yr, mo)
 	if !ok {
 		return
 	}
@@ -385,14 +380,16 @@ func (s *Server) importDryRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) importCommit(w http.ResponseWriter, r *http.Request) {
-	pf, ok := s.loadUpload(w, r)
+	var req struct {
+		Reason string `json:"reason"`
+		Year   int    `json:"period_year"`
+		Month  int    `json:"period_month"`
+	}
+	_ = readJSON(r, &req)
+	pf, ok := s.loadUpload(w, r, req.Year, req.Month)
 	if !ok {
 		return
 	}
-	var req struct {
-		Reason string `json:"reason"`
-	}
-	_ = readJSON(r, &req)
 	res, err := ingest.Commit(r.Context(), s.pool, pf, req.Reason)
 	if err != nil {
 		httpErr(w, http.StatusInternalServerError, err.Error())
@@ -440,8 +437,9 @@ func (s *Server) importList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// loadUpload re-parses a previously uploaded file by its token.
-func (s *Server) loadUpload(w http.ResponseWriter, r *http.Request) (*ingest.ParsedFeed, bool) {
+// loadUpload re-parses a previously uploaded file by its token. When yr/mo are
+// non-zero they override the period detected from the file title (§4.1).
+func (s *Server) loadUpload(w http.ResponseWriter, r *http.Request, yr, mo int) (*ingest.ParsedFeed, bool) {
 	token := r.PathValue("id")
 	if !safeToken(token) {
 		httpErr(w, http.StatusBadRequest, "bad upload id")
@@ -452,12 +450,23 @@ func (s *Server) loadUpload(w http.ResponseWriter, r *http.Request) (*ingest.Par
 		httpErr(w, http.StatusNotFound, "upload not found (re-upload the file)")
 		return nil, false
 	}
-	pf, err := ingest.DetectAndParse(path)
+	pf, err := ingest.DetectAndParseWithPeriod(path, yr, mo)
 	if err != nil {
 		httpErr(w, http.StatusUnprocessableEntity, err.Error())
 		return nil, false
 	}
 	return pf, true
+}
+
+// periodOverride parses year/month request values, returning (0,0) when either
+// is absent or unparseable so the parser falls back to the file's own title.
+func periodOverride(yearStr, monthStr string) (int, int) {
+	yr, err1 := strconv.Atoi(strings.TrimSpace(yearStr))
+	mo, err2 := strconv.Atoi(strings.TrimSpace(monthStr))
+	if err1 != nil || err2 != nil {
+		return 0, 0
+	}
+	return yr, mo
 }
 
 // dryRunDTO shapes a DryRunReport for JSON, omitting the huge per-row slice.

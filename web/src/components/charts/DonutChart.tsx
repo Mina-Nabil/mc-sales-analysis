@@ -4,12 +4,14 @@ export interface DonutSegment {
   color: string;
 }
 
-export function DonutChart({ segments, size = 160, thickness = 20, centerLabel, centerValue }: {
+export function DonutChart({ segments, size = 160, thickness = 20, centerLabel, centerValue, formatValue }: {
   segments: DonutSegment[];
   size?: number;
   thickness?: number;
   centerLabel?: string;
   centerValue?: string;
+  /** When set, the legend shows "value (pct%)" instead of just the percentage. */
+  formatValue?: (n: number) => string;
 }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0) || 1;
   const r = (size - thickness) / 2;
@@ -55,7 +57,11 @@ export function DonutChart({ segments, size = 160, thickness = 20, centerLabel, 
           <div key={seg.label} className="flex items-center gap-2 text-[12.5px]">
             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: seg.color }} />
             <span className="text-t1">{seg.label}</span>
-            <span className="font-bold text-t0">{Math.round((seg.value / total) * 100)}%</span>
+            {formatValue ? (
+              <span className="font-bold text-t0">{formatValue(seg.value)} <span className="font-normal text-t2">({Math.round((seg.value / total) * 100)}%)</span></span>
+            ) : (
+              <span className="font-bold text-t0">{Math.round((seg.value / total) * 100)}%</span>
+            )}
           </div>
         ))}
       </div>

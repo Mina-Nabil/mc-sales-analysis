@@ -29,19 +29,79 @@ func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 		BrandID   int64  `json:"brand_id"`
 		Name      string `json:"name"`
 		CarType   string `json:"car_type"`
-		Tier      string `json:"tier"`
 		SegmentID *int64 `json:"segment_id"`
 	}
 	if err := readJSON(r, &req); err != nil || req.BrandID == 0 || req.Name == "" {
 		httpErr(w, http.StatusBadRequest, "brand_id and name required")
 		return
 	}
-	id, name, err := tree.CreateModel(r.Context(), s.pool, req.BrandID, req.Name, req.CarType, req.SegmentID, req.Tier, s.user(r).ID)
+	id, name, err := tree.CreateModel(r.Context(), s.pool, req.BrandID, req.Name, req.CarType, req.SegmentID, s.user(r).ID)
 	if err != nil {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "name": name})
+}
+
+// modelDetail returns one model's full spec set for the Model Analytics page:
+// model-level specs, the brand-level origin, and the distributor resolved from
+// the effective-dated (brand, car_type) assignment at the model's latest fact
+// period (mirrors the LATERAL in analytics.joinBlock).
+func (s *Server) modelDetail(w http.ResponseWriter, r *http.Request) {
+	id, err := pathInt(r, "id")
+	if err != nil {
+		httpErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var d struct {
+		ID          int64   `json:"id"`
+		Name        string  `json:"name"`
+		Brand       string  `json:"brand"`
+		BrandID     int64   `json:"brand_id"`
+		Origin      *string `json:"origin"`
+		CarType     *string `json:"car_type"`
+		Segment     *string `json:"segment"`
+		EngineType  *string `json:"engine_type"`
+		Supply      *string `json:"supply"`
+		Distributor *string `json:"distributor"`
+		TotalVolume int64   `json:"total_volume"`
+		FirstPeriod *string `json:"first_period"`
+		LastPeriod  *string `json:"last_period"`
+	}
+	err = s.pool.QueryRow(r.Context(), `
+		WITH span AS (
+			SELECT COALESCE(SUM(volume),0)::bigint AS total,
+			       -- Only periods with actual sales: the monthly feed emits a row
+			       -- per gov/unit even when the Zero count is 0, so plain MIN/MAX
+			       -- would report a model as "active" long after it stopped selling.
+			       MIN(make_date(period_year, period_month, 1)) FILTER (WHERE volume > 0) AS first_p,
+			       MAX(make_date(period_year, period_month, 1)) FILTER (WHERE volume > 0) AS last_p
+			  FROM facts WHERE model_id = $1
+		)
+		SELECT m.id, m.name, b.name, b.id, b.origin,
+		       m.car_type, seg.name, m.engine_type, m.supply,
+		       (SELECT dd.name FROM distributor_assignments da
+		          JOIN distributors dd ON dd.id = da.distributor_id
+		         WHERE da.brand_id = b.id AND da.car_type = m.car_type
+		           AND da.valid_from <= COALESCE((SELECT last_p FROM span), CURRENT_DATE)
+		           AND (da.valid_to IS NULL
+		                OR da.valid_to > COALESCE((SELECT last_p FROM span), CURRENT_DATE))
+		         LIMIT 1),
+		       (SELECT total FROM span),
+		       to_char((SELECT first_p FROM span), 'YYYY-MM'),
+		       to_char((SELECT last_p FROM span), 'YYYY-MM')
+		  FROM models m
+		  JOIN brands b ON b.id = m.brand_id
+		  LEFT JOIN segments seg ON seg.id = m.segment_id
+		 WHERE m.id = $1`, id).
+		Scan(&d.ID, &d.Name, &d.Brand, &d.BrandID, &d.Origin, &d.CarType, &d.Segment,
+			&d.EngineType, &d.Supply, &d.Distributor, &d.TotalVolume,
+			&d.FirstPeriod, &d.LastPeriod)
+	if err != nil {
+		httpErr(w, http.StatusNotFound, "model not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
 }
 
 func (s *Server) editModel(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +113,6 @@ func (s *Server) editModel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name       string `json:"name"`
 		CarType    string `json:"car_type"`
-		Tier       string `json:"tier"`
 		EngineType string `json:"engine_type"`
 		Supply     string `json:"supply"`
 		SegmentID  *int64 `json:"segment_id"`
@@ -62,7 +121,7 @@ func (s *Server) editModel(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if err := tree.EditModel(r.Context(), s.pool, id, req.Name, req.CarType, req.Tier, req.EngineType, req.Supply, req.SegmentID, s.user(r).ID); err != nil {
+	if err := tree.EditModel(r.Context(), s.pool, id, req.Name, req.CarType, req.EngineType, req.Supply, req.SegmentID, s.user(r).ID); err != nil {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
@@ -183,14 +242,13 @@ func (s *Server) reviewNewModel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name      string `json:"name"`
 		CarType   string `json:"car_type"`
-		Tier      string `json:"tier"`
 		SegmentID *int64 `json:"segment_id"`
 	}
 	if err := readJSON(r, &req); err != nil || req.Name == "" {
 		httpErr(w, http.StatusBadRequest, "name required")
 		return
 	}
-	modelID, units, err := tree.CreateModelForReview(r.Context(), s.pool, id, req.Name, req.CarType, req.SegmentID, req.Tier, s.user(r).ID)
+	modelID, units, err := tree.CreateModelForReview(r.Context(), s.pool, id, req.Name, req.CarType, req.SegmentID, s.user(r).ID)
 	if err != nil {
 		httpErr(w, http.StatusConflict, err.Error())
 		return

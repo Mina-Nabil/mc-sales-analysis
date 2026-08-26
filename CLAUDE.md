@@ -171,6 +171,11 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
 - `npm run build` → `web/dist`, embedded via `assets.go`, served by `server serve`
   (`spaHandler` deep-link fallback). **`web/dist` is committed** so `go build`
   works without a JS toolchain; rebuild dist then the Go binary after FE changes.
+  **In production the SPA is served from S3 + CloudFront** (edge redesign, TECH §11);
+  the embed stays for local/dev and as a fallback. CloudFront routes `/api/*` to the
+  Fargate task (via a t4g.nano Caddy proxy) and `/*` to the S3 SPA bucket, so a FE
+  deploy is `npm run build` → `aws s3 sync web/dist` → CloudFront invalidation, with
+  no Go rebuild.
 - Pages: Overview, Analytics (charts), Dashboard (§5.1 matrix + Excel export),
   Review (J/K/Enter/R/N keys, new-brand/model modals), Tree (edit/merge/detach),
   Import, Settings, Audit. Raw Arabic uses `dir="rtl"`/`dir="auto"`.

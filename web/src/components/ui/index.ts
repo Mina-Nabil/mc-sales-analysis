@@ -24,3 +24,4 @@ export * from "./Kanban";
 export * from "./Timeline";
 export * from "./Rating";
 export * from "./Skeleton";
+export * from "./LoadingBar";

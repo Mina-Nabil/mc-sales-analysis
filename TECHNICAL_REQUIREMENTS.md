@@ -757,17 +757,36 @@ A one-shot command, re-runnable, that reads the source workbook and produces the
 
 ## 11. Deployment target — decided and approved
 
-**Option A− from `WEB_APP_PROPOSAL.md` §5.2, ~$56/month, Frankfurt (`eu-central-1`).** Build to exactly this. Do not add components not listed here.
+**Option A− from `WEB_APP_PROPOSAL.md` §5.2, ~$56–60/month, Frankfurt (`eu-central-1`).** Build to exactly this. Do not add components not listed here.
+
+> **Edge redesign (2026-08-23):** Cloudflare is dropped. Ingress is now **CloudFront**
+> (TLS at the edge via ACM, Shield Standard) with the **SPA split to S3** (`/*`) and the
+> **API served from the Fargate task** (`/api/*`) through a **t4g.nano Caddy proxy** that
+> is the only public origin. This **reverses the earlier "no CloudFront / Cloudflare Tunnel"
+> decision** below. The proxy replaces what the Tunnel did (stable origin, locked ingress)
+> without an ALB; the Fargate task registers in **AWS Cloud Map** so its ephemeral IP does
+> not break the origin. Roughly cost-neutral vs. the Tunnel plan — the win is removing the
+> Cloudflare dependency and gaining a real CDN + independent front-end deploys.
 
 | Component | Exact spec | Monthly |
 |---|---|---:|
-| ECS Fargate | **1 task**, 0.5 vCPU / 1 GB, **ARM64 (Graviton)**, 24/7 | $18.02 |
+| ECS Fargate | **1 task**, 0.5 vCPU / 1 GB, **ARM64 (Graviton)**, 24/7 (+ public IPv4 ~$3.6) | $21.6 |
 | RDS PostgreSQL 16+ | **db.t4g.small**, Single-AZ, 7-day automated backups | $23.36 |
 | Storage | 20 GB gp3, autoscaling to 100 GB | $2.30 |
-| Ingress | **Cloudflare Tunnel** — no load balancer (approved) | $0 |
-| S3 | uploads, exports, weekly tree dumps; IA lifecycle at 90 days | ~$2 |
-| CloudWatch / Secrets / ECR | logs at **7-day retention** | ~$3 |
-| **Total** | us-east-1 $49 · **Frankfurt ~$56** | |
+| Ingress | **CloudFront** → S3 (SPA) + **t4g.nano Caddy proxy** (EIP) → Fargate; no ALB | ~$8 |
+| S3 | SPA + uploads, exports, weekly tree dumps; IA lifecycle at 90 days | ~$2 |
+| CloudWatch / Secrets / ECR / Route53 | logs at **7-day retention** | ~$3 |
+| **Total** | **Frankfurt ~$56–60** | |
+
+Ingress is a Terraform flag, `use_proxy` (**deployed value: `false`**):
+- `true` → a t4g.nano Caddy box (EIP) is the CloudFront `/api` origin.
+- `false` (~$7/mo cheaper, ~$50) → **no box**; a Lambda fired by EventBridge on each ECS
+  task reaching RUNNING writes the task's **public** IP into a Route53 record that CloudFront
+  uses as the `/api` origin on :8080. (Needed because ECS service discovery only publishes the
+  task's *private* IP, unreachable from the CloudFront edge.) Tradeoffs: a brief 5xx window
+  during task recycles while Route53 + CloudFront re-resolve, and a plain-HTTP CloudFront→origin
+  hop — the same posture as the proxy path; only an ALB+ACM cert (~$16/mo) can encrypt that hop.
+  The viewer→CloudFront leg is TLS in both cases.
 
 ### 11.1 Account, region and infrastructure-as-code
 
@@ -781,9 +800,8 @@ A one-shot command, re-runnable, that reads the source workbook and produces the
 
 | Excluded | Would cost | Why not |
 |---|---:|---|
-| Application Load Balancer | $16.43/mo + LCU | **Approved: removed.** Cloudflare Tunnel gives TLS, DDoS protection and zero public ingress, free. |
-| NAT Gateway | $32.85/mo **per AZ** | Task in a public subnet with a locked-down security group; VPC endpoints for S3 and Bedrock. |
-| CloudFront | ~$5/mo | React build is embedded in the Go binary (`embed.FS`). |
+| Application Load Balancer | $16.43/mo + LCU | **Approved: removed.** A t4g.nano Caddy proxy is the stable CloudFront origin at ~$4/mo instead. The task SG admits only the proxy; the proxy SG admits only CloudFront's managed prefix list — zero open public ingress. |
+| NAT Gateway | $32.85/mo **per AZ** | Task in a public subnet with a locked-down security group (egress via IGW); VPC endpoints for S3 and Bedrock. |
 | Second Fargate task | $18/mo | Worker is a goroutine (§1). |
 | Multi-AZ RDS | +$23/mo | Single-AZ + automated backups until downtime has a measured cost. |
 | Aurora Serverless v2 | ~$43/mo floor | Does not scale to zero; more expensive than `db.t4g.small` here. |
