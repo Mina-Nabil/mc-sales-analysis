@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, fmt } from '@/lib/api'
-import { Card, CardHeader, CardTitle, CardSubtitle, Button, Badge, Tooltip } from '@/components/ui'
-import { BarChart } from '@/components/charts'
+import { Card, CardTitle, Button, Badge, Tooltip } from '@/components/ui'
 import { FilterBar, useFilters } from '@/components/FilterBar'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const YEARS = [2026, 2025, 2024, 2023, 2022, 2021]
-const PALETTE = ['var(--acc)', 'var(--info)', 'var(--ok)', 'var(--warn)', 'var(--bad)', 'var(--acc-2)', '#c084fc', '#22d3ee']
 const selCls = 'h-9 rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-2.5 text-[13px] text-t0'
 
 export default function Dashboard() {
@@ -47,7 +45,6 @@ export default function Dashboard() {
   const primaryLabel = singleMonth ? `${MONTHS[month - 1]} ${year}` : `${year}`
   const compareLabel = compareMonth > 0 ? `${MONTHS[compareMonth - 1]} ${compare}` : singleMonth ? `${MONTHS[month - 1]} ${compare}` : `${compare}`
   const dimLabel = cap(dimension)
-  const bars = rows.slice(0, 8).map((r: any, i: number) => ({ label: r.key, value: r.total, color: PALETTE[i % PALETTE.length] }))
 
   const copyLink = () => { navigator.clipboard?.writeText(window.location.href); setCopied(true); setTimeout(() => setCopied(false), 1500) }
 
@@ -55,7 +52,7 @@ export default function Dashboard() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Dashboard</h1>
+          <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Raw data</h1>
           <p className="mt-1 text-[13px] text-t1">The matrix — any dimension × period, with share, growth &amp; rank.</p>
         </div>
         <div className="flex gap-2">
@@ -88,11 +85,6 @@ export default function Dashboard() {
           {data && <span className="ml-auto text-[12px] text-t1">Total <b className="text-t0">{fmt(data.denominator)}</b> units · {rows.length} rows</span>}
         </div>
         <div className="mt-3 border-t border-line pt-3"><FilterBar /></div>
-      </Card>
-
-      <Card>
-        <CardHeader><div><CardTitle>Top {dimLabel}s by volume</CardTitle><CardSubtitle>{primaryLabel}</CardSubtitle></div></CardHeader>
-        {bars.length ? <BarChart data={bars} height={220} formatValue={(v) => fmt(v)} /> : <div className="grid h-40 place-items-center text-t2">No data</div>}
       </Card>
 
       <Card padding="none" className="overflow-hidden">

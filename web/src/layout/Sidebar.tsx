@@ -6,7 +6,7 @@ const NAV: [string, string, string, boolean?][] = [
   ['/', 'Overview', 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', true],
   ['/analytics', 'Analytics', 'M3 3v18h18M7 14l3-3 3 3 5-6'],
   ['/models', 'Model Comparison', 'M3 17l6-6 4 4 8-8M3 21h18'],
-  ['/dashboard', 'Dashboard', 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z'],
+  ['/dashboard', 'Raw data', 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z'],
   ['/review', 'Review queue', 'M22 12h-6l-2 3h-4l-2-3H2M5 5h14l3 7v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-6z'],
   ['/tree', 'Car tree', 'M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5'],
   ['/import', 'Import', 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12'],
