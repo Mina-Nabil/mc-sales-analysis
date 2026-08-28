@@ -53,7 +53,11 @@ jobs:
           context: .
           platforms: linux/arm64
           push: true
-          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+          # Push :latest too — the ECS task definition references :latest and the
+          # deploy step below re-pulls it via --force-new-deployment.
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.ecr.outputs.registry }}/${{ vars.ECR_REPOSITORY }}:latest
           provenance: false
 
       - name: Roll the ECS service to the new image
