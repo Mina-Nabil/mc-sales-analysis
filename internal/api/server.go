@@ -112,6 +112,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/imports/{id}/dry-run", s.auth(s.importDryRun))
 	mux.HandleFunc("GET /api/v1/imports/{id}/rows", s.auth(s.importRows))
 	mux.HandleFunc("POST /api/v1/imports/{id}/commit", s.auth(s.importCommit))
+	mux.HandleFunc("GET /api/v1/periods", s.auth(s.listPeriods))
+	mux.HandleFunc("POST /api/v1/periods/delete", s.auth(s.deletePeriods))
 
 	// saved analytics views
 	mux.HandleFunc("GET /api/v1/views", s.auth(s.listViews))

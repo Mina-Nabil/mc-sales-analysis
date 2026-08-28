@@ -145,7 +145,12 @@ export default function Dashboard() {
                   </td>
                   <td className={'px-3 py-2 text-right tabular-nums ' + (r.share_point_delta >= 0 ? 'text-ok' : 'text-bad')}>{r.share_point_delta >= 0 ? '+' : ''}{r.share_point_delta.toFixed(2)}</td>
                   <td className="px-3 py-2 text-right tabular-nums text-t1">
-                    {r.rank}{r.rank_prior && r.rank_prior !== r.rank ? <span className="ml-1 text-[10px] text-t2">({r.rank < r.rank_prior ? '▲' : '▼'}{Math.abs(r.rank - r.rank_prior)})</span> : ''}
+                    {r.rank}
+                    {r.rank_prior
+                      ? <span className={'ml-1 text-[10px] ' + (r.rank < r.rank_prior ? 'text-ok' : r.rank > r.rank_prior ? 'text-bad' : 'text-t2')}>
+                          (was {r.rank_prior})
+                        </span>
+                      : <span className="ml-1 text-[10px] text-t2">(new)</span>}
                   </td>
                 </tr>
               ))}

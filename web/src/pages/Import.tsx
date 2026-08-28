@@ -186,6 +186,8 @@ export default function Import() {
 
       {report && upload && <RowsTable token={upload.upload_id} year={year} month={month} />}
 
+      {!report && <DeletePeriods onDone={loadBatches} />}
+
       {!report && (
       <Card padding="none" className="overflow-hidden">
         <div className="border-b border-line px-5 py-4"><CardTitle>Recent batches</CardTitle></div>
@@ -350,6 +352,108 @@ function RowsTable({ token, year, month }: { token: string; year: number; month:
           </div>
         </div>
       )}
+    </Card>
+  )
+}
+
+// ── Delete facts by period ───────────────────────────────────────────────────
+// Removes the selected months' facts only. The car tree (brands, models,
+// aliases, segments) is never touched — re-importing the month restores it.
+const MON_SHORT = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+function DeletePeriods({ onDone }: { onDone: () => void }) {
+  const [periods, setPeriods] = useState<any[] | null>(null)
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [confirming, setConfirming] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+
+  const load = () => api.periods().then(setPeriods).catch(() => setPeriods([]))
+  useEffect(() => { load() }, [])
+
+  const key = (p: any) => `${p.year}-${p.month}`
+  const toggle = (p: any) => setSel((s) => { const n = new Set(s); const k = key(p); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const chosen = (periods || []).filter((p) => sel.has(key(p)))
+  const totalRows = chosen.reduce((s, p) => s + Number(p.rows), 0)
+  const totalUnits = chosen.reduce((s, p) => s + Number(p.volume), 0)
+
+  async function run() {
+    setBusy(true); setMsg('')
+    try {
+      const r = await api.deletePeriods(chosen.map((p) => ({ year: p.year, month: p.month })))
+      setMsg(`Deleted ${fmt(r.deleted_rows)} facts (${fmt(r.deleted_volume)} units) across ${r.periods} period(s).`)
+      setSel(new Set()); setConfirming(false); setTyped('')
+      await load(); onDone()
+    } catch (e: any) { setMsg('⚠ ' + e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <div>
+          <CardTitle>Delete facts by period</CardTitle>
+          <p className="mt-0.5 text-[12.5px] text-t1">Removes the month's facts only — the car tree is left untouched.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {sel.size > 0 && <button onClick={() => setSel(new Set())} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear</button>}
+          <Button size="sm" variant="danger" disabled={sel.size === 0 || busy} onClick={() => { setTyped(''); setConfirming(true) }}>
+            Delete {sel.size > 0 ? `${sel.size} period${sel.size > 1 ? 's' : ''}` : ''}
+          </Button>
+        </div>
+      </div>
+
+      {msg && <div className="border-b border-line bg-bg-inset px-5 py-2.5 text-[13px] text-t0">{msg}</div>}
+
+      <div className="max-h-[360px] overflow-auto">
+        <table className="w-full min-w-[560px] border-collapse text-sm">
+          <thead><tr className="border-b border-line">
+            <th className="sticky top-0 z-10 w-10 bg-bg-2 px-4 py-3"></th>
+            {['Period', 'Facts', 'Units', 'Source'].map((h, i) => (
+              <th key={h} className={'sticky top-0 z-10 bg-bg-2 px-4 py-3 text-[10.5px] font-bold uppercase tracking-wide text-t2 ' + (i === 1 || i === 2 ? 'text-right' : 'text-left')}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {periods === null && <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px] text-t2">Loading…</td></tr>}
+            {periods?.map((p) => {
+              const on = sel.has(key(p))
+              return (
+                <tr key={key(p)} onClick={() => toggle(p)}
+                  className={'cursor-pointer border-b border-line last:border-0 ' + (on ? 'bg-bad/10' : 'hover:bg-bg-3')}>
+                  <td className="px-4 py-2.5">
+                    <input type="checkbox" checked={on} onChange={() => toggle(p)} onClick={(e) => e.stopPropagation()} className="h-4 w-4 accent-[var(--bad)]" />
+                  </td>
+                  <td className="px-4 py-2.5 font-semibold text-t0">{MON_SHORT[p.month]} {p.year}</td>
+                  <td className="px-4 py-2.5 text-right tabular-nums text-t1">{fmt(p.rows)}</td>
+                  <td className="px-4 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(p.volume)}</td>
+                  <td className="max-w-[220px] truncate px-4 py-2.5 text-[12px] text-t2">{p.batch_filename || '—'}</td>
+                </tr>
+              )
+            })}
+            {periods?.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-[13px] text-t2">No periods loaded.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={confirming} onClose={() => setConfirming(false)} size="sm" title="Delete facts"
+        footer={<><Button variant="ghost" onClick={() => setConfirming(false)}>Cancel</Button>
+          <Button variant="danger" disabled={typed !== 'DELETE' || busy} onClick={run}>Delete permanently</Button></>}>
+        <p className="text-[13px] text-t1">
+          This deletes <span className="font-bold text-t0">{fmt(totalRows)} facts</span> ({fmt(totalUnits)} units) from{' '}
+          <span className="font-bold text-t0">{chosen.length}</span> period(s):
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {chosen.map((p) => <span key={key(p)} className="rounded-full border border-bad/40 bg-bad/10 px-2.5 py-1 text-[12px] font-semibold text-bad">{MON_SHORT[p.month]} {p.year}</span>)}
+        </div>
+        <p className="mt-3 text-[12.5px] text-t2">
+          Brands, models and aliases are <span className="font-semibold text-t1">not</span> affected. This cannot be undone —
+          re-import the month to restore it.
+        </p>
+        <div className="mt-3">
+          <p className="mb-1.5 text-[12.5px] text-t1">Type <span className="font-bold text-t0">DELETE</span> to confirm:</p>
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="DELETE" autoFocus />
+        </div>
+      </Modal>
     </Card>
   )
 }

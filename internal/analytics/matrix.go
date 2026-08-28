@@ -223,7 +223,11 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 			r.GrowthPct = &g
 		} // else nil → "new"
 		r.Rank = rankCur[i]
-		r.RankPrior = rankPrior[i]
+		// A brand with no prior volume has no prior rank: every zero ties, so a
+		// position among them would be arbitrary (and reads as a huge climb).
+		if prior > 0 {
+			r.RankPrior = rankPrior[i]
+		}
 		recs[i].row = r
 	}
 

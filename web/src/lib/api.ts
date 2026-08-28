@@ -98,6 +98,10 @@ export const api = {
   commit: (token: string, reason: string, year?: number, month?: number) =>
     req('POST', `/imports/${token}/commit`, { reason, period_year: year, period_month: month }),
 
+  periods: () => req('GET', '/periods'),
+  deletePeriods: (periods: { year: number; month: number }[]) =>
+    req('POST', '/periods/delete', { periods, confirm: 'DELETE' }),
+
   views: () => req('GET', '/views'),
   createView: (name: string, config: any) => req('POST', '/views', { name, config }),
   updateView: (id: number, patch: { name?: string; config?: any }) => req('PATCH', `/views/${id}`, patch),
