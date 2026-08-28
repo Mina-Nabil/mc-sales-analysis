@@ -106,15 +106,20 @@ resource "aws_cloudwatch_log_group" "lambda" {
   retention_in_days = 7
 }
 
-# ── EventBridge: fire on our cluster's tasks reaching RUNNING ────────────────
+# ── EventBridge: fire ONLY on the SERVICE's tasks reaching RUNNING ───────────
+# The group filter ("service:<name>") is essential: without it, one-off run-task
+# tasks (migrate-facts, seed, resolve …) would each point the API DNS at their own
+# transient IP and then exit, leaving a dead origin. Only the long-lived service
+# task should own the record.
 resource "aws_cloudwatch_event_rule" "task_running" {
   name        = "mc-sales-task-running-${var.env}"
-  description = "ECS task RUNNING triggers API origin DNS refresh"
+  description = "Service task RUNNING triggers API origin DNS refresh"
   event_pattern = jsonencode({
     source      = ["aws.ecs"]
     detail-type = ["ECS Task State Change"]
     detail = {
       clusterArn    = [var.cluster_arn]
+      group         = ["service:${var.service_name}"]
       lastStatus    = ["RUNNING"]
       desiredStatus = ["RUNNING"]
     }

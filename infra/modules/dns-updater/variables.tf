@@ -14,3 +14,8 @@ variable "ttl" {
   type    = number
   default = 15
 }
+
+variable "service_name" {
+  type        = string
+  description = "ECS service name; only its tasks own the API DNS record."
+}

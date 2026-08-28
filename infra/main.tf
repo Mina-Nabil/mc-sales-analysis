@@ -68,6 +68,7 @@ module "dns_updater" {
   route53_zone_id = var.route53_zone_id
   subdomain       = "api"
   cluster_arn     = module.compute.cluster_arn
+  service_name    = module.compute.service_name
 }
 
 module "edge_cdn" {
