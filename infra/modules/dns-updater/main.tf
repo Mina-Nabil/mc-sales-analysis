@@ -66,7 +66,7 @@ resource "aws_iam_role_policy" "lambda" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = ["ec2:DescribeNetworkInterfaces"]
+        Action   = ["ec2:DescribeNetworkInterfaces", "ecs:DescribeTasks"]
         Resource = "*" # Describe* does not support resource-level scoping
       },
       {
