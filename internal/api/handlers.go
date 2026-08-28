@@ -399,6 +399,64 @@ func (s *Server) importCommit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// importRows returns the uploaded sheet's rows, annotated with how each one
+// resolves, paginated and filterable — the dry-run's detailed preview.
+func (s *Server) importRows(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	yr, mo := periodOverride(q.Get("year"), q.Get("month"))
+	pf, ok := s.loadUpload(w, r, yr, mo)
+	if !ok {
+		return
+	}
+	all, err := ingest.AnnotateRows(r.Context(), s.pool, pf)
+	if err != nil {
+		httpErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	status := q.Get("status")
+	needle := strings.ToLower(strings.TrimSpace(q.Get("q")))
+	filtered := make([]ingest.AnnotatedRow, 0, len(all))
+	counts := map[string]int{}
+	var shownVolume int
+	for _, a := range all {
+		counts[a.Status]++
+		if status != "" && status != "all" && a.Status != status {
+			continue
+		}
+		if needle != "" {
+			hay := strings.ToLower(a.Gov + " " + a.Unit + " " + a.Brand + " " + a.Model + " " + a.CanonBrand + " " + a.CanonModel)
+			if !strings.Contains(hay, needle) {
+				continue
+			}
+		}
+		filtered = append(filtered, a)
+		shownVolume += a.Volume
+	}
+
+	offset := atoiOr(q.Get("offset"), 0)
+	limit := atoiOr(q.Get("limit"), 200)
+	if limit <= 0 || limit > 1000 {
+		limit = 200
+	}
+	if offset < 0 || offset > len(filtered) {
+		offset = 0
+	}
+	end := offset + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"total":        len(filtered),
+		"grand_total":  len(all),
+		"offset":       offset,
+		"limit":        limit,
+		"shown_volume": shownVolume,
+		"counts":       counts,
+		"rows":         filtered[offset:end],
+	})
+}
+
 func (s *Server) importList(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.pool.Query(r.Context(), `
 		SELECT id, COALESCE(source_filename,''), COALESCE(feed_role,''),

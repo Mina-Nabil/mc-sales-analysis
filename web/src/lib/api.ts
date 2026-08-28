@@ -94,6 +94,7 @@ export const api = {
   },
   dryRun: (token: string, year?: number, month?: number) =>
     req('GET', `/imports/${token}/dry-run` + (year && month ? `?year=${year}&month=${month}` : '')),
+  importRows: (token: string, qs: string) => req('GET', `/imports/${token}/rows?${qs}`),
   commit: (token: string, reason: string, year?: number, month?: number) =>
     req('POST', `/imports/${token}/commit`, { reason, period_year: year, period_month: month }),
 
