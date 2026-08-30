@@ -252,6 +252,15 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
   fact-level dimensions; both COALESCE to 'Unknown' and are sorted numerically
   (Unknown last) rather than by volume. Excluded facts (`status='rejected'`) are
   filtered out of `Matrix`/`Values`/`Aggregate`/`Timeseries` by `notExcluded`.
+- **Filters derive from the dimension expressions** (`filterExpr`), never a
+  parallel map. The filter picker is fed by `Values()`, which returns *dimension*
+  values, so anything it offers must compare against the expression that produced
+  it. A hand-maintained twin map drifted: the model dimension renders
+  `b.name||' '||m.name` ("Peugeot 408") while the model filter compared `m.name`
+  ("408"), so the picker's own values matched nothing — and every COALESCE'd
+  bucket ('Unknown', 'No distributor') was unfilterable for the same reason.
+  `model_id` is the one deliberate non-dimension filter (`extraFilters`).
+  `TestEveryDimensionValueIsFilterable` round-trips all 13 dimensions.
 - API: `GET /analytics/matrix`, `/analytics/dimensions`, `/analytics/export.xlsx`
   (excelize, workbook column layout). Frontend `Dashboard.tsx`: dimension/year/
   filter selectors, top-N bar chart, the full month matrix, export button.

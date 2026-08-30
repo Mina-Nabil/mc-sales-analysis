@@ -41,26 +41,30 @@ var dimensions = map[string]string{
 // chronological dimensions read badly ranked by volume — order them by key.
 var orderedByKey = map[string]bool{"model_year": true, "model_age": true}
 
-// filter key → SQL expression compared with = ANY($n).
-var filters = map[string]string{
-	"brand": "b.name",
-	// model is matched by NAME and is therefore not brand-scoped (models are only
-	// UNIQUE (brand_id, name)) — pair it with a brand filter, or prefer model_id.
-	"model": "m.name",
+// extraFilters are filter keys that are NOT dimensions. Everything else filters
+// on the dimension expression itself — see filterExpr.
+var extraFilters = map[string]string{
 	// model_id is the unambiguous, comma-safe way to pin one exact model; it also
 	// hits the facts(model_id, period_year, period_month) index.
-	"model_id":     "f.model_id::text",
-	"segment":      "seg.name",
-	"car_type":     "m.car_type",
-	"engine":       "m.engine_type",
-	"origin":       "b.origin",
-	"supply":       "m.supply",
-	"region":       "rg.name",
-	"governorate":  "g.name",
-	"traffic_unit": "tu.name",
-	"distributor":  "d.name",
-	"model_year":   "f.model_year::text",
-	"model_age":    "(f.period_year - f.model_year)::text",
+	"model_id": "f.model_id::text",
+}
+
+// filterExpr returns the SQL a filter key compares against.
+//
+// It is deliberately the DIMENSION expression, not a hand-written twin. The
+// filter picker is populated by Values(), which returns dimension values, so a
+// filter must compare against whatever produced them. Maintaining a second map
+// meant the two silently drifted: the model dimension renders "Peugeot 408"
+// (b.name||' '||m.name) while the model filter compared against m.name ("408"),
+// so every value the picker offered matched nothing. The same drift made every
+// COALESCE'd bucket — 'Unknown', 'No distributor' — impossible to filter on,
+// because the filter expressions dropped the COALESCE.
+func filterExpr(key string) (string, bool) {
+	if expr, ok := extraFilters[key]; ok {
+		return expr, true
+	}
+	expr, ok := dimensions[key]
+	return expr, ok
 }
 
 // notExcluded keeps facts a reviewer marked out of scope out of every measure.
@@ -149,7 +153,7 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 		return len(args)
 	}
 	for key, vals := range p.Filters {
-		if expr, ok := filters[key]; ok && len(vals) > 0 {
+		if expr, ok := filterExpr(key); ok && len(vals) > 0 {
 			where = append(where, fmt.Sprintf("%s = ANY($%d)", expr, add(expr, vals)))
 		}
 	}
@@ -312,7 +316,7 @@ func joinBlock(withDist bool) string {
 func filterWhere(f map[string][]string, args *[]any) []string {
 	var where []string
 	for key, vals := range f {
-		if expr, ok := filters[key]; ok && len(vals) > 0 {
+		if expr, ok := filterExpr(key); ok && len(vals) > 0 {
 			*args = append(*args, vals)
 			where = append(where, fmt.Sprintf("%s = ANY($%d)", expr, len(*args)))
 		}
