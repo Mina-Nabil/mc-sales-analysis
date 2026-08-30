@@ -7,6 +7,7 @@ package review
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/domain"
 	"github.com/jackc/pgx/v5"
@@ -37,12 +38,21 @@ func Resolve(ctx context.Context, pool *pgxpool.Pool, threshold, floor float64) 
 		return out, err
 	}
 
+	// Pairs whose alias was rejected are deliberately left alone: re-selecting
+	// them would re-link the very facts a reviewer just detached (the alias
+	// itself is skipped by upsertAlias's ON CONFLICT guard, so the item would
+	// never come back to the queue to be noticed). They stay 'unresolved' and
+	// are surfaced as unresolved volume until a human resolves them explicitly.
 	rows, err := pool.Query(ctx, `
-		SELECT brand_id, raw_model, count(*), sum(volume)
-		  FROM facts
-		 WHERE brand_id IS NOT NULL AND model_id IS NULL AND status = 'unresolved'
-		 GROUP BY brand_id, raw_model
-		 ORDER BY sum(volume) DESC`)
+		SELECT f.brand_id, f.raw_model, count(*), sum(f.volume)
+		  FROM facts f
+		 WHERE f.brand_id IS NOT NULL AND f.model_id IS NULL AND f.status = 'unresolved'
+		   AND NOT EXISTS (
+		         SELECT 1 FROM model_aliases a
+		          WHERE a.brand_id = f.brand_id AND a.raw = f.raw_model
+		            AND a.status = 'rejected')
+		 GROUP BY f.brand_id, f.raw_model
+		 ORDER BY sum(f.volume) DESC`)
 	if err != nil {
 		return out, err
 	}
@@ -137,6 +147,7 @@ func Resolve(ctx context.Context, pool *pgxpool.Pool, threshold, floor float64) 
 // Item is one review-queue entry as shown to a reviewer (§6.2).
 type Item struct {
 	AliasID    int64    `json:"alias_id"`
+	BrandID    int64    `json:"brand_id"`
 	Brand      string   `json:"brand"`
 	RawModel   string   `json:"raw_model"`
 	Proposal   string   `json:"proposal"` // proposed model name, or "" (new model)
@@ -151,7 +162,7 @@ type Item struct {
 // List returns the queue, ranked by volume impact descending (§6.2).
 func List(ctx context.Context, pool *pgxpool.Pool, limit int) ([]Item, error) {
 	rows, err := pool.Query(ctx, `
-		SELECT a.id, b.name, a.raw, m.name, a.model_id, a.confidence, a.method,
+		SELECT a.id, a.brand_id, b.name, a.raw, m.name, a.model_id, a.confidence, a.method,
 		       COALESCE(a.reasoning,''),
 		       COALESCE(v.vol,0), COALESCE(v.periods,0)
 		  FROM model_aliases a
@@ -174,7 +185,7 @@ func List(ctx context.Context, pool *pgxpool.Pool, limit int) ([]Item, error) {
 	for rows.Next() {
 		var it Item
 		var proposal *string
-		if err := rows.Scan(&it.AliasID, &it.Brand, &it.RawModel, &proposal,
+		if err := rows.Scan(&it.AliasID, &it.BrandID, &it.Brand, &it.RawModel, &proposal,
 			&it.ProposalID, &it.Confidence, &it.Method, &it.Reasoning,
 			&it.Volume, &it.Periods); err != nil {
 			return nil, err
@@ -260,17 +271,27 @@ func Reject(ctx context.Context, pool *pgxpool.Pool, aliasID int64) error {
 
 	var brandID int64
 	var raw, status string
-	if err := tx.QueryRow(ctx,
-		`SELECT brand_id, raw, status FROM model_aliases WHERE id=$1 FOR UPDATE`,
-		aliasID).Scan(&brandID, &raw, &status); err != nil {
+	var rejected *string
+	if err := tx.QueryRow(ctx, `
+		SELECT a.brand_id, a.raw, a.status, m.name
+		  FROM model_aliases a
+		  LEFT JOIN models m ON m.id = a.model_id
+		 WHERE a.id=$1 FOR UPDATE OF a`,
+		aliasID).Scan(&brandID, &raw, &status, &rejected); err != nil {
 		return err
 	}
 	if status != "needs_review" {
 		return fmt.Errorf("item was already %s — refresh the queue", status)
 	}
+	// model_id is cleared so the alias can never resolve, but the model that was
+	// rejected is kept in reasoning — that is the negative example (§4.5).
+	note := "rejected by reviewer"
+	if rejected != nil {
+		note = fmt.Sprintf("rejected by reviewer — not %q", *rejected)
+	}
 	if _, err := tx.Exec(ctx,
-		`UPDATE model_aliases SET status='rejected', model_id=NULL, decided_at=now() WHERE id=$1`,
-		aliasID); err != nil {
+		`UPDATE model_aliases SET status='rejected', model_id=NULL, reasoning=$2, decided_at=now() WHERE id=$1`,
+		aliasID, note); err != nil {
 		return err
 	}
 	var units int
@@ -290,6 +311,65 @@ func Reject(ctx context.Context, pool *pgxpool.Pool, aliasID int64) error {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// Exclude marks a review item's volume as out of scope — not a car sale this
+// product tracks. The alias is rejected so the string never proposes again, and
+// its facts move to status='rejected', which the analytics layer filters out.
+//
+// Nothing is deleted. The rows stay, the units stay countable, and the excluded
+// total is reported beside the motorcycle drop — §0.1 ("excluded, but always
+// counted & reported") and §8.1 ("never clean totals") both apply here.
+// Returns the units excluded.
+func Exclude(ctx context.Context, pool *pgxpool.Pool, aliasID int64, reason string) (int, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	var brandID int64
+	var raw, status string
+	if err := tx.QueryRow(ctx,
+		`SELECT brand_id, raw, status FROM model_aliases WHERE id=$1 FOR UPDATE`,
+		aliasID).Scan(&brandID, &raw, &status); err != nil {
+		return 0, fmt.Errorf("alias %d: %w", aliasID, err)
+	}
+	if status != "needs_review" {
+		return 0, fmt.Errorf("item was already %s — refresh the queue", status)
+	}
+
+	note := "excluded by reviewer — volume out of scope"
+	if strings.TrimSpace(reason) != "" {
+		note = "excluded by reviewer — " + strings.TrimSpace(reason)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE model_aliases
+		   SET status='rejected', model_id=NULL, method='human', confidence=NULL,
+		       reasoning=$2, decided_at=now()
+		 WHERE id=$1`, aliasID, note); err != nil {
+		return 0, err
+	}
+
+	var units int
+	if err := tx.QueryRow(ctx, `
+		SELECT COALESCE(sum(volume),0) FROM facts
+		 WHERE brand_id=$1 AND raw_model=$2
+		   AND status IN ('needs_review','unresolved','auto_resolved')`,
+		brandID, raw).Scan(&units); err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE facts SET model_id=NULL, status='rejected'
+		 WHERE brand_id=$1 AND raw_model=$2
+		   AND status IN ('needs_review','unresolved','auto_resolved')`,
+		brandID, raw); err != nil {
+		return 0, err
+	}
+	if err := logChange(ctx, tx, "model_alias", aliasID, "exclude", units); err != nil {
+		return 0, err
+	}
+	return units, tx.Commit(ctx)
 }
 
 // BulkConfirm confirms every proposed (non-null) item at or above minConfidence

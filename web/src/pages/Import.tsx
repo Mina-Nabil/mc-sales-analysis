@@ -151,9 +151,31 @@ export default function Import() {
             </div>
           </div>
 
+          {report.signature === 'brands_models_by_year' ? (
+            <div className="mt-4">
+              <div className="mb-2 text-[12px] font-bold uppercase tracking-wide text-t2">
+                Model year {report.unknown_year_volume > 0 && <span className="text-warn">· {fmt(report.unknown_year_volume)} units without one</span>}
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                {(report.model_years || []).map((y: number) => {
+                  const v = report.year_mix?.[y] || 0
+                  const pct = report.car_volume ? (100 * v / report.car_volume).toFixed(1) : '0.0'
+                  return <KV key={y} label={String(y)} value={fmt(v)} sub={`${pct}% of car units`} />
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-[var(--radius-vela-md)] border border-warn/40 bg-warn-soft px-3.5 py-2.5 text-[13px] text-warn">
+              This is the by-status feed, which carries no year of manufacture — the month will import with an
+              empty model year. Upload <span className="font-semibold">إحصائية الماركات والطرازات للمركبات الزيرو</span> instead to get it.
+            </div>
+          )}
+
           <div className="mt-4 grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-3">
             <Meta label="File" value={upload?.filename || '—'} />
-            <Meta label="Feed" value={report.signature || '—'} />
+            <Meta label="Feed" value={report.signature === 'brands_models_by_year'
+              ? 'All vehicles, by model year' : report.signature === 'brands_models_by_status'
+              ? 'All vehicles, by status (no model year)' : (report.signature || '—')} />
             <Meta label="Period" value={`${report.period_year}-${String(report.period_month).padStart(2, '0')}`} />
           </div>
           {report.new_brands?.length > 0 && (

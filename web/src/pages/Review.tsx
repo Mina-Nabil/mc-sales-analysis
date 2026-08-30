@@ -18,6 +18,8 @@ export default function Review() {
   const [minConf, setMinConf] = useState('0.95')
   const [newModelFor, setNewModelFor] = useState<any>(null)
   const [resolveFor, setResolveFor] = useState<any>(null)
+  const [mergeFor, setMergeFor] = useState<any>(null)
+  const [excludeFor, setExcludeFor] = useState<any>(null)
   const rowsRef = useRef<(HTMLTableRowElement | null)[]>([])
 
   const load = useCallback(async () => {
@@ -33,25 +35,42 @@ export default function Review() {
     catch (e: any) { setMsg('⚠ ' + e.message) } finally { setBusy(false) }
   }, [load])
 
+  // A decision may also unlock sibling spellings already stored under an
+  // equivalent raw string — the server replays the deterministic ladder and
+  // reports what else it settled, so the reviewer sees the queue shrink.
+  const withReplay = (label: string) => (r: any) => {
+    const rep = r?.replay
+    const extra = rep && (rep.model_rows || rep.brand_rows)
+      ? ` Also linked ${fmt(rep.model_rows + rep.brand_rows)} more rows (${fmt(rep.model_volume + rep.brand_volume)} units) from equivalent spellings.`
+      : ''
+    return `${label} — ${fmt(r?.facts_rederived)} facts re-derived.${extra}`
+  }
+
   const confirm = (it: any) => {
     if (!it) return
-    if (!it.proposal_id) { setNewModelFor(it); return }
-    act(() => api.confirm(it.alias_id), (r) => `Confirmed — ${fmt(r.facts_rederived)} facts re-derived.`)
+    if (!it.proposal_id) { setMergeFor(it); return }
+    act(() => api.confirm(it.alias_id), withReplay('Merged'))
   }
-  const reject = (it: any) => it && act(() => api.reject(it.alias_id), 'Rejected.')
+  const mergeInto = (it: any, modelID: number) =>
+    act(() => api.reassign(it.alias_id, modelID), withReplay('Merged'))
+  const reject = (it: any) => it && act(() => api.reject(it.alias_id), 'Marked wrong — volume returned to unresolved.')
+  const exclude = (it: any, reason: string) =>
+    act(() => api.exclude(it.alias_id, reason), (r) => `Excluded ${fmt(r.excluded_volume)} units — kept on record, out of the measures.`)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT' || newModelFor || resolveFor || tab !== 'models') return
+      if ((e.target as HTMLElement).tagName === 'INPUT' || newModelFor || resolveFor || mergeFor || excludeFor || tab !== 'models') return
       if (e.key === 'j') setSel((s) => Math.min(s + 1, items.length - 1))
       else if (e.key === 'k') setSel((s) => Math.max(s - 1, 0))
       else if (e.key === 'Enter') confirm(items[sel])
+      else if (e.key === 'm') items[sel] && setMergeFor(items[sel])
       else if (e.key === 'r') reject(items[sel])
       else if (e.key === 'n') items[sel] && setNewModelFor(items[sel])
+      else if (e.key === 'x') items[sel] && setExcludeFor(items[sel])
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items, sel, newModelFor, resolveFor, tab]) // eslint-disable-line
+  }, [items, sel, newModelFor, resolveFor, mergeFor, excludeFor, tab]) // eslint-disable-line
   useEffect(() => { rowsRef.current[sel]?.scrollIntoView({ block: 'nearest' }) }, [sel])
 
   return (
@@ -59,7 +78,7 @@ export default function Review() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Review queue</h1>
-          <p className="mt-1 text-[13px] text-t1">Volume-ranked inbox. Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>Enter</Kbd> confirm · <Kbd>R</Kbd> reject · <Kbd>N</Kbd> new model.</p>
+          <p className="mt-1 text-[13px] text-t1">Volume-ranked inbox. Keys: <Kbd>J</Kbd>/<Kbd>K</Kbd> move · <Kbd>Enter</Kbd> accept proposal · <Kbd>M</Kbd> merge into… · <Kbd>N</Kbd> new model · <Kbd>R</Kbd> wrong match · <Kbd>X</Kbd> not needed.</p>
         </div>
         {tab === 'models' && (
           <div className="flex items-center gap-2">
@@ -85,7 +104,7 @@ export default function Review() {
       {tab === 'models' ? (
         <Card padding="none" className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-sm">
+            <table className="w-full min-w-[920px] border-collapse text-sm">
               <thead><tr className="border-b border-line">
                 {['Brand', 'Raw model', 'Proposal', 'Conf', 'Volume', ''].map((h, i) => (
                   <th key={i} className={'px-4 py-3 text-[10.5px] font-bold uppercase tracking-wide text-t2 ' + (h === 'Volume' ? 'text-right' : 'text-left')}>{h}</th>
@@ -102,10 +121,20 @@ export default function Review() {
                     <td className="px-4 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(it.volume)}</td>
                     <td className="px-4 py-2.5">
                       <div className="flex justify-end gap-1.5">
-                        {it.proposal_id
-                          ? <Button size="sm" disabled={busy} onClick={(e) => { e.stopPropagation(); confirm(it) }}>✓</Button>
-                          : <Button size="sm" variant="secondary" disabled={busy} onClick={(e) => { e.stopPropagation(); setNewModelFor(it) }}>＋ model</Button>}
-                        <Button size="sm" variant="danger" disabled={busy} onClick={(e) => { e.stopPropagation(); reject(it) }}>✕</Button>
+                        {it.proposal_id && (
+                          <Button size="sm" disabled={busy} title={`Merge into ${it.proposal}`}
+                            onClick={(e) => { e.stopPropagation(); confirm(it) }}>✓</Button>
+                        )}
+                        <Button size="sm" variant="secondary" disabled={busy} title="Merge into a model you pick"
+                          onClick={(e) => { e.stopPropagation(); setMergeFor(it) }}>Merge…</Button>
+                        <Button size="sm" variant="secondary" disabled={busy} title="Create a new model for this string"
+                          onClick={(e) => { e.stopPropagation(); setNewModelFor(it) }}>＋ model</Button>
+                        {it.proposal_id && (
+                          <Button size="sm" variant="ghost" disabled={busy} title="Proposal is wrong — volume stays unresolved"
+                            onClick={(e) => { e.stopPropagation(); reject(it) }}>Wrong</Button>
+                        )}
+                        <Button size="sm" variant="danger" disabled={busy} title="Volume is out of scope — exclude from the measures"
+                          onClick={(e) => { e.stopPropagation(); setExcludeFor(it) }}>Not needed</Button>
                       </div>
                     </td>
                   </tr>
@@ -142,6 +171,10 @@ export default function Review() {
 
       <NewModelModal item={newModelFor} segments={segments} onClose={() => setNewModelFor(null)}
         onSubmit={(body) => { const it = newModelFor; setNewModelFor(null); act(() => api.newModelForReview(it.alias_id, body), (r) => `Created model, re-derived ${fmt(r.facts_rederived)} facts.`) }} />
+      <MergeModal item={mergeFor} onClose={() => setMergeFor(null)}
+        onSubmit={(modelID: number) => { const it = mergeFor; setMergeFor(null); mergeInto(it, modelID) }} />
+      <ExcludeModal item={excludeFor} onClose={() => setExcludeFor(null)}
+        onSubmit={(reason: string) => { const it = excludeFor; setExcludeFor(null); exclude(it, reason) }} />
       <BrandResolveModal item={resolveFor} brands={brands} onClose={() => setResolveFor(null)}
         onSubmit={(body) => { const it = resolveFor; setResolveFor(null); act(() => api.resolveBrand({ raw_brand: it.raw_brand, ...body }), (r) => `Resolved — ${fmt(r.facts_rederived)} facts now carry the brand.`) }} />
     </div>
@@ -150,6 +183,75 @@ export default function Review() {
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return <kbd className="rounded border border-line-2 bg-bg-3 px-1.5 text-[10px] font-bold text-t1">{children}</kbd>
+}
+
+// MergeModal — pick which existing model this raw spelling belongs to. The
+// model list is scoped to the row's brand (aliases are per-brand, TECH §2.2);
+// the fuzzy proposal, when there is one, starts selected.
+function MergeModal({ item, onClose, onSubmit }: any) {
+  const [models, setModels] = useState<any[]>([])
+  const [q, setQ] = useState('')
+  const [picked, setPicked] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!item) return
+    setQ(''); setPicked(item.proposal_id ?? null); setModels([]); setLoading(true)
+    api.brandModels(item.brand_id).then((m: any[]) => setModels(m || [])).catch(() => setModels([])).finally(() => setLoading(false))
+  }, [item])
+
+  if (!item) return null
+  const needle = q.trim().toLowerCase()
+  const shown = needle ? models.filter((m) => m.name.toLowerCase().includes(needle)) : models
+
+  return (
+    <Modal open={!!item} onClose={onClose} title={`Merge into an existing ${item.brand} model`}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button disabled={!picked} onClick={() => picked && onSubmit(picked)}>Merge volume</Button></>}>
+      <p className="mb-3 text-[12.5px] text-t1">
+        Raw string: <span dir="rtl" className="font-semibold text-t0">{item.raw_model || '(blank)'}</span> · {fmt(item.volume)} units
+      </p>
+      <input className={field + ' mb-2'} placeholder="Search models…" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
+      <div className="max-h-[280px] overflow-y-auto rounded-[var(--radius-vela-md)] border border-line">
+        {loading && <div className="p-4 text-center text-[13px] text-t2">Loading models…</div>}
+        {!loading && shown.length === 0 && <div className="p-4 text-center text-[13px] text-t2">No models match.</div>}
+        {shown.map((m) => (
+          <button key={m.id} onClick={() => setPicked(m.id)}
+            className={'flex w-full items-center justify-between border-b border-line px-3 py-2 text-left text-[13px] last:border-0 ' +
+              (picked === m.id ? 'bg-acc-soft font-semibold text-acc' : 'text-t1 hover:bg-bg-3')}>
+            <span>{m.name}{m.id === item.proposal_id && <span className="ml-2 text-[11px] font-semibold text-t2">proposed</span>}</span>
+            <span className="tabular-nums text-t2">{fmt(m.volume)}</span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  )
+}
+
+// ExcludeModal — "this volume is not needed". Confirmed explicitly because it
+// takes units out of every measure; the facts are marked, never deleted, and
+// stay reported so period totals still reconcile.
+function ExcludeModal({ item, onClose, onSubmit }: any) {
+  const [reason, setReason] = useState('')
+  useEffect(() => { if (item) setReason('') }, [item])
+  if (!item) return null
+  return (
+    <Modal open={!!item} onClose={onClose} title="Exclude this volume"
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="danger" onClick={() => onSubmit(reason)}>Exclude {fmt(item.volume)} units</Button></>}>
+      <p className="mb-3 text-[12.5px] text-t1">
+        <span dir="rtl" className="font-semibold text-t0">{item.brand} · {item.raw_model || '(blank)'}</span>
+      </p>
+      <p className="mb-3 text-[12.5px] text-t1">
+        These {fmt(item.volume)} units leave every share, growth and rank figure. Nothing is deleted — the rows stay
+        on record and the excluded total is reported with the period, so totals still reconcile against the authority.
+      </p>
+      <Field label="Reason (optional)">
+        <input className={field} value={reason} onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. agricultural vehicle, not a car" autoFocus />
+      </Field>
+    </Modal>
+  )
 }
 
 function NewModelModal({ item, segments, onClose, onSubmit }: any) {

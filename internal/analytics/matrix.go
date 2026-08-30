@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,7 +30,16 @@ var dimensions = map[string]string{
 	"governorate":  "COALESCE(g.name,'Unknown')",
 	"traffic_unit": "COALESCE(tu.name,'Unknown')",
 	"distributor":  "COALESCE(d.name,'No distributor')",
+	// Fact-level, not JOIN-derived: model year is observed source data, part of
+	// the row's own identity like volume, so §2.5 still holds.
+	"model_year": "COALESCE(f.model_year::text,'Unknown')",
+	// Age at registration, which stays comparable across years in a way the raw
+	// year cannot: -1 is next year's model, 0 the current one.
+	"model_age": "CASE WHEN f.model_year IS NULL THEN 'Unknown' ELSE (f.period_year - f.model_year)::text END",
 }
+
+// chronological dimensions read badly ranked by volume — order them by key.
+var orderedByKey = map[string]bool{"model_year": true, "model_age": true}
 
 // filter key → SQL expression compared with = ANY($n).
 var filters = map[string]string{
@@ -49,7 +59,14 @@ var filters = map[string]string{
 	"governorate":  "g.name",
 	"traffic_unit": "tu.name",
 	"distributor":  "d.name",
+	"model_year":   "f.model_year::text",
+	"model_age":    "(f.period_year - f.model_year)::text",
 }
+
+// notExcluded keeps facts a reviewer marked out of scope out of every measure.
+// They are never deleted (§8.1) — the rows stay countable and the excluded total
+// is reported separately — but they must not enter any share or growth figure.
+const notExcluded = "f.status <> 'rejected'"
 
 // Params configures a matrix query. The primary period is (Year, Month) and the
 // comparison period is (CompareYear, CompareMonth); Month/CompareMonth are 0 for
@@ -126,7 +143,7 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 	}
 
 	args := []any{p.Year, p.CompareYear}
-	where := []string{"f.period_year IN ($1,$2)"}
+	where := []string{"f.period_year IN ($1,$2)", notExcluded}
 	add := func(expr string, vals any) int {
 		args = append(args, vals)
 		return len(args)
@@ -231,7 +248,22 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 		recs[i].row = r
 	}
 
-	sort.SliceStable(recs, func(a, b int) bool { return recs[a].row.Total > recs[b].row.Total })
+	if orderedByKey[p.Dimension] {
+		// numeric-aware, with the 'Unknown' bucket pinned to the end
+		sort.SliceStable(recs, func(a, b int) bool {
+			ka, oka := keyAsInt(recs[a].row.Key)
+			kb, okb := keyAsInt(recs[b].row.Key)
+			if oka != okb {
+				return oka // a real year/age sorts before 'Unknown'
+			}
+			if !oka {
+				return recs[a].row.Key < recs[b].row.Key
+			}
+			return ka < kb
+		})
+	} else {
+		sort.SliceStable(recs, func(a, b int) bool { return recs[a].row.Total > recs[b].row.Total })
+	}
 	limit := p.Limit
 	if limit <= 0 || limit > len(recs) {
 		limit = len(recs)
@@ -296,11 +328,8 @@ func Values(ctx context.Context, pool *pgxpool.Pool, dimension string, f map[str
 		return nil, fmt.Errorf("unknown dimension %q", dimension)
 	}
 	var args []any
-	where := filterWhere(f, &args)
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
-	}
+	where := append([]string{notExcluded}, filterWhere(f, &args)...)
+	whereSQL := "WHERE " + strings.Join(where, " AND ")
 	q := fmt.Sprintf(`SELECT DISTINCT %s AS v FROM facts f %s %s ORDER BY v LIMIT 1000`,
 		dimExpr, joinBlock(needsDist(dimension, f)), whereSQL)
 	rows, err := pool.Query(ctx, q, args...)
@@ -333,15 +362,12 @@ func Aggregate(ctx context.Context, pool *pgxpool.Pool, dimension string, f map[
 		return nil, fmt.Errorf("unknown dimension %q", dimension)
 	}
 	var args []any
-	where := filterWhere(f, &args)
+	where := append([]string{notExcluded}, filterWhere(f, &args)...)
 	if year > 0 {
 		args = append(args, year)
 		where = append(where, fmt.Sprintf("f.period_year = $%d", len(args)))
 	}
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
-	}
+	whereSQL := "WHERE " + strings.Join(where, " AND ")
 	q := fmt.Sprintf(`SELECT %s AS k, COALESCE(sum(f.volume),0) AS v
 		FROM facts f %s %s GROUP BY k ORDER BY v DESC LIMIT 200`,
 		dimExpr, joinBlock(needsDist(dimension, f)), whereSQL)
@@ -373,15 +399,12 @@ type Point struct {
 // year via filters). Ordered chronologically.
 func Timeseries(ctx context.Context, pool *pgxpool.Pool, f map[string][]string, year int) ([]Point, error) {
 	var args []any
-	where := filterWhere(f, &args)
+	where := append([]string{notExcluded}, filterWhere(f, &args)...)
 	if year > 0 {
 		args = append(args, year)
 		where = append(where, fmt.Sprintf("f.period_year = $%d", len(args)))
 	}
-	whereSQL := ""
-	if len(where) > 0 {
-		whereSQL = "WHERE " + strings.Join(where, " AND ")
-	}
+	whereSQL := "WHERE " + strings.Join(where, " AND ")
 	q := fmt.Sprintf(`
 		SELECT f.period_year, f.period_month, COALESCE(sum(f.volume),0)
 		  FROM facts f %s %s
@@ -430,6 +453,13 @@ func monthSet(ctx context.Context, pool *pgxpool.Pool, year, month int) []int {
 }
 
 func allMonths() []int { return []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12} }
+
+// keyAsInt parses a dimension key that should be numeric ("2027", "-1"),
+// reporting false for 'Unknown' and anything else non-numeric.
+func keyAsInt(k string) (int, bool) {
+	n, err := strconv.Atoi(k)
+	return n, err == nil
+}
 
 func monthFilters() string {
 	parts := make([]string, 12)

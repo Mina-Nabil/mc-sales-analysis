@@ -25,7 +25,8 @@
 mainsource/
 phase0/
 dump/       # raw traffic-authority archives (workbook + monthly zips)
-feeds/      # monthly primary feeds extracted from dump/ (scripts/extract-feeds.py)
+feeds/      # monthly by-status feeds extracted from dump/ (scripts/extract-feeds.py)
+feeds-year/ # monthly by-model-year feeds — the preferred primary (same script, --kind year)
 
 # but keep the seed CSVs — they ARE the seed state
 !seed/*.csv

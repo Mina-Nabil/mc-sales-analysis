@@ -84,6 +84,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/review/bulk-confirm", s.auth(s.reviewBulkConfirm))
 	mux.HandleFunc("POST /api/v1/review/{id}/confirm", s.auth(s.reviewConfirm))
 	mux.HandleFunc("POST /api/v1/review/{id}/reject", s.auth(s.reviewReject))
+	mux.HandleFunc("POST /api/v1/review/{id}/exclude", s.auth(s.reviewExclude))
 	mux.HandleFunc("POST /api/v1/review/{id}/reassign", s.auth(s.reviewReassign))
 	mux.HandleFunc("POST /api/v1/review/{id}/new-model", s.auth(s.reviewNewModel))
 	mux.HandleFunc("POST /api/v1/resolve", s.auth(s.resolve))

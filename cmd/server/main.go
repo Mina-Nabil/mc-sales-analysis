@@ -65,6 +65,8 @@ func run(ctx context.Context, cmd string) error {
 		return cmdLoadFeeds(ctx)
 	case "refresh-model-defaults":
 		return cmdRefreshModelDefaults(ctx)
+	case "reresolve":
+		return cmdReresolve(ctx)
 	case "resolve":
 		return cmdResolve(ctx)
 	case "review":
@@ -188,7 +190,10 @@ func cmdImport(ctx context.Context, commit bool, reason string) error {
 	}
 	fmt.Printf("%s batch #%d for %04d-%02d — %d car facts / %d units (dropped %d motorcycle rows / %d units)\n",
 		verb, r.BatchID, pf.Year, pf.Month, r.CarRows, r.CarVolume, r.DroppedMotoRows, r.DroppedMotoVol)
-	return nil
+	if err := analytics.RefreshModelDefaults(ctx, pool); err != nil {
+		return err
+	}
+	return reportReresolve(ctx, pool)
 }
 
 func printDryRun(r *ingest.DryRunReport) {
@@ -312,6 +317,9 @@ func cmdLoadFeeds(ctx context.Context) error {
 	}
 	if committed > 0 {
 		if err := analytics.RefreshModelDefaults(ctx, pool); err != nil {
+			return err
+		}
+		if err := reportReresolve(ctx, pool); err != nil {
 			return err
 		}
 	}
@@ -549,6 +557,38 @@ func floatDefault(s string, def float64) float64 {
 	return def
 }
 
+// cmdReresolve replays the deterministic ladder over unresolved facts, picking
+// up sibling spellings that a newly-confirmed alias now covers.
+func cmdReresolve(ctx context.Context) error {
+	pool, err := store.Connect(ctx, dbURL())
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	for _, a := range os.Args[2:] {
+		if a == "--dry-run" {
+			res, err := ingest.ReresolveDryRun(ctx, pool)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("deterministic replay (DRY RUN — nothing written): %d rows / %d units would gain a brand, %d rows / %d units would gain a model\n",
+				res.BrandRows, res.BrandVolume, res.ModelRows, res.ModelVolume)
+			return nil
+		}
+	}
+	return reportReresolve(ctx, pool)
+}
+
+func reportReresolve(ctx context.Context, pool *pgxpool.Pool) error {
+	res, err := ingest.ReresolveUnresolved(ctx, pool)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("deterministic replay: %d rows / %d units gained a brand, %d rows / %d units gained a model\n",
+		res.BrandRows, res.BrandVolume, res.ModelRows, res.ModelVolume)
+	return nil
+}
+
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: server <migrate|seed|migrate-facts|import|import-commit|load-feeds|resolve|review|serve|seed-admin>")
+	fmt.Fprintln(os.Stderr, "usage: server <migrate|seed|migrate-facts|import|import-commit|load-feeds|reresolve|resolve|review|serve|seed-admin>")
 }

@@ -28,6 +28,12 @@ deterministically; only ~64 genuinely-new pairs/month reach the AI.
   `models.engine_type`/`supply` are auto-derived (dominant historical value,
   `analytics.RefreshModelDefaults`, run after every fact load) and editable in
   the tree; editing re-derives every month's facts.
+- **Model year is the one fact-level dimension.** `facts.model_year` (سنة الصنع)
+  is *observed* source data, part of the row's own identity like volume — not
+  derived from the tree — so §2.5 still holds. It is populated from 2026 on and
+  **permanently NULL for Feb-2021 → Dec-2025**: the source workbook has no
+  manufacture-year column (its `Year` col is the registration period) and no raw
+  archive survives for those months. 'Unknown' is the honest value, not a guess.
 - **Model aliases are scoped to a brand.** Never resolve a model alias globally. (TECH §2.2)
 - **Distributor is optional** — modelled as absence of a row, never a sentinel.
   NULL distributor is a valid permanent state, never enters the review queue. (TECH §2.4)
@@ -77,10 +83,34 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
 
 ## Live monthly import (`import` / `import-commit`, TECH §4)
 
-- Primary feed `brands_models_by_status`: title row carries the period
+- **Preferred feed `brands_models_by_year`** — <span dir="rtl">إحصائية الماركات
+  والطرازات للمركبات الزيرو</span>, "zero vehicles by year of manufacture". Same
+  first five columns as the older feed, then a <span dir="rtl">سنة الصنع</span>
+  block whose 4-digit year sub-columns are read from **row 3 dynamically** (the
+  authority slides the window: Jan/Feb-2026 report 2022–2026, Mar onward
+  2023–2027). One source row unpivots into one fact per non-empty year cell.
+  Proven an **exact** decomposition of the old feed's `Zero` column — same keys,
+  same values, 0 discrepancies across all six overlapping months
+  (`TestFeedsReconcileExactly`). It is also ~5× fewer fact rows, because the
+  by-status feed stores every row that appeared under *any* status and ~85% of
+  those carry volume 0.
+- **Decoy guard:** every archive also holds <span dir="rtl">تقرير … المركبات
+  الملاكي …</span> — private plates only, *identical* header signature, ~35% of
+  the units (Jul-2026: 22,378 vs 63,219). `rejectPrivatePlateVariant` matches the
+  **normalized** title (these sheets carry tatweel throughout, so a raw substring
+  test is unreliable).
+- **Residual guard:** if a row's year cells do not sum to its own grand total,
+  the difference is emitted as one `model_year = NULL` fact, so the period still
+  reconciles exactly (§8.1) instead of silently losing units. Never observed in
+  seven months, but it makes the property structural rather than lucky.
+- Fallback feed `brands_models_by_status`: title row carries the period
   (`من YYYY/MM/DD …`), row 2 = dimension labels, row 3 = status sub-columns.
-  **Volume = the `Zero` column.** Governorate/unit are forward-filled; subtotal
+  **Volume = the `Zero` column**, and `model_year` is left NULL — the dry run
+  says so before you commit. Governorate/unit are forward-filled; subtotal
   rows (blank brand+model) are skipped.
+- `scripts/extract-feeds.py [dump] [out] --kind year|status` pulls whichever
+  shape you want out of the archives (`feeds-year/` and `feeds/` respectively).
+  It probes every xlsx in an archive, since several share a header shape.
 - **Live motorcycle exclusion:** the monthly feed has no Car Type column, so §0.1
   can't fire at parse time. `motorcycle_keys` (seeded, migration 0002) carries the
   no-space normalized brand / brand-model keys history proved to be motorcycles;
@@ -117,10 +147,35 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
   ≥floor → `needs_review` with a proposal; else → `needs_review`, no proposal
   (new-model candidate). Review items ARE `model_aliases` rows with
   status='needs_review' (no separate table); volume is joined from facts.
-- Confirm/reassign write a `confirmed`/human alias and re-derive every fact for
-  that (brand, raw_model); reject returns facts to unresolved and keeps the alias
-  as a negative example (§4.5). All write `change_log` with units in
-  `volume_impact`. Optimistic concurrency: a decide fails if status ≠ needs_review.
+- **Four decisions per row** (all offered on every item, not just when a proposal
+  exists): *merge into a model you pick* (`Confirm`/`reassign` + the Merge modal,
+  brand-scoped list, proposal preselected), *new model* (`CreateModelForReview`),
+  *wrong match* (`Reject` — proposal was wrong, volume returns to `unresolved`
+  and the rejected model is kept in `reasoning` as the negative example, §4.5),
+  and *not needed* (`Exclude` — volume is out of scope). Keys J/K/Enter/M/N/R/X.
+- **`Exclude` marks, never deletes**: facts → `status='rejected'`, and analytics
+  filters them out via the `notExcluded` predicate in `Matrix`/`Values`/
+  `Aggregate`/`Timeseries` (the first fact-status filter in that layer). Rows stay
+  countable so period totals still reconcile — §0.1 "counted & reported", §8.1
+  "never clean totals". Excluded units are returned by the endpoint and shown in
+  the modal; a reported per-period line is still to do.
+- All decisions write `change_log` with units in `volume_impact`. Optimistic
+  concurrency: a decide fails if status ≠ needs_review.
+- **`Resolve` skips pairs with a `rejected` alias.** It used to re-select them
+  (`model_id IS NULL AND status='unresolved'`) and re-run the unconditional facts
+  UPDATE, silently re-linking the very model a reviewer had rejected — while
+  `upsertAlias`'s ON CONFLICT guard left the alias `rejected`, so `List` never
+  showed the item again. Fixed with a `NOT EXISTS` guard.
+- **`ingest.ReresolveUnresolved` replays tiers 1/2/2b over stored facts** after
+  every import and every review decision (`server reresolve`, `--dry-run` to
+  preview). Confirming an alias only re-derives that exact raw spelling; ~5% of
+  normalized model keys have more than one spelling, so siblings already in
+  `facts` would otherwise wait for a fuzzy pass. The API returns what the replay
+  settled as `replay` on each decision response.
+- **Fixed: `tree.CreateModel` had 6 value expressions for 5 columns** (the same
+  defect as the seed loader's, commit cb322d4), so *every* "new model" decision —
+  review queue and Tree page — failed at the database. Regression test in
+  `internal/tree/tree_test.go`.
 - Brand-unresolved facts (no brand_id) are surfaced in a separate **brand queue**
   (`tree.BrandQueue`) and resolved via `tree.ResolveBrand` (create/assign a brand
   → alias raw→brand → set brand_id on facts, which then flow to the model queue).
@@ -193,6 +248,10 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
 - Growth % is **YTD-based** (same month window both years) so a partial current
   year compares fairly. Shares/ranks/share-point-delta computed in Go from the
   grouped rows. Distributor dim uses an effective-dated LATERAL join.
+- `model_year` and `model_age` (`period_year - model_year`) are the only
+  fact-level dimensions; both COALESCE to 'Unknown' and are sorted numerically
+  (Unknown last) rather than by volume. Excluded facts (`status='rejected'`) are
+  filtered out of `Matrix`/`Values`/`Aggregate`/`Timeseries` by `notExcluded`.
 - API: `GET /analytics/matrix`, `/analytics/dimensions`, `/analytics/export.xlsx`
   (excelize, workbook column layout). Frontend `Dashboard.tsx`: dimension/year/
   filter selectors, top-N bar chart, the full month matrix, export button.

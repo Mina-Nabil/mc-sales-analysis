@@ -194,3 +194,152 @@ func put(m map[string]int64, key string, id int64) {
 func mkey(brandID int64, key string) string {
 	return fmt.Sprintf("%d\x00%s", brandID, key)
 }
+
+// ── deterministic replay over already-stored facts ──────────────────────────
+
+// ReresolveResult reports what a replay linked.
+type ReresolveResult struct {
+	BrandRows   int `json:"brand_rows"`
+	BrandVolume int `json:"brand_volume"`
+	ModelRows   int `json:"model_rows"`
+	ModelVolume int `json:"model_volume"`
+}
+
+// ReresolveUnresolved replays the deterministic ladder (tiers 1, 2, 2b) over
+// facts that are still unresolved, against the alias tables as they stand now.
+//
+// Confirming a review item writes an alias for one exact raw spelling and
+// re-derives only that spelling's facts. A sibling spelling already stored —
+// differing just by spacing, a separator or tatweel — is covered by the new
+// alias's normalized keys on the NEXT import, but the rows already in the table
+// stay unresolved until something replays the ladder over them. This is that
+// replay: no thresholds, no fuzzy, no guesses, so it is safe to run after every
+// review decision and at the end of every import.
+//
+// Pairs whose alias was rejected are skipped, for the same reason Resolve skips
+// them: a reviewer detached those facts deliberately.
+func ReresolveUnresolved(ctx context.Context, pool *pgxpool.Pool) (ReresolveResult, error) {
+	return reresolve(ctx, pool, false)
+}
+
+// ReresolveDryRun reports exactly what ReresolveUnresolved would link, without
+// keeping any of it: the same work runs inside a transaction that is rolled back.
+func ReresolveDryRun(ctx context.Context, pool *pgxpool.Pool) (ReresolveResult, error) {
+	return reresolve(ctx, pool, true)
+}
+
+func reresolve(ctx context.Context, pool *pgxpool.Pool, dryRun bool) (ReresolveResult, error) {
+	var out ReresolveResult
+	res, err := loadResolver(ctx, pool)
+	if err != nil {
+		return out, err
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback(ctx)
+
+	// ── brands first: a fact that gains a brand becomes eligible for a model ──
+	type brandItem struct {
+		raw string
+		id  int64
+	}
+	var brandHits []brandItem
+	rows, err := tx.Query(ctx,
+		`SELECT DISTINCT raw_brand FROM facts WHERE brand_id IS NULL`)
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			rows.Close()
+			return out, err
+		}
+		if id := res.brand(raw); id != 0 {
+			brandHits = append(brandHits, brandItem{raw, id})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	for _, b := range brandHits {
+		var units int
+		_ = tx.QueryRow(ctx,
+			`SELECT COALESCE(sum(volume),0) FROM facts WHERE raw_brand=$1 AND brand_id IS NULL`,
+			b.raw).Scan(&units)
+		ct, err := tx.Exec(ctx,
+			`UPDATE facts SET brand_id=$2 WHERE raw_brand=$1 AND brand_id IS NULL`, b.raw, b.id)
+		if err != nil {
+			return out, err
+		}
+		out.BrandRows += int(ct.RowsAffected())
+		out.BrandVolume += units
+	}
+
+	// ── then models, within the (now possibly larger) resolved-brand set ──────
+	type modelItem struct {
+		brandID int64
+		raw     string
+		modelID int64
+	}
+	var modelHits []modelItem
+	rows, err = tx.Query(ctx, `
+		SELECT DISTINCT f.brand_id, f.raw_model
+		  FROM facts f
+		 WHERE f.brand_id IS NOT NULL AND f.model_id IS NULL AND f.status = 'unresolved'
+		   AND NOT EXISTS (
+		         SELECT 1 FROM model_aliases a
+		          WHERE a.brand_id = f.brand_id AND a.raw = f.raw_model
+		            AND a.status = 'rejected')`)
+	if err != nil {
+		return out, err
+	}
+	for rows.Next() {
+		var bid int64
+		var raw string
+		if err := rows.Scan(&bid, &raw); err != nil {
+			rows.Close()
+			return out, err
+		}
+		if mid := res.model(bid, raw); mid != 0 {
+			modelHits = append(modelHits, modelItem{bid, raw, mid})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	for _, m := range modelHits {
+		var units int
+		_ = tx.QueryRow(ctx, `
+			SELECT COALESCE(sum(volume),0) FROM facts
+			 WHERE brand_id=$1 AND raw_model=$2 AND model_id IS NULL AND status='unresolved'`,
+			m.brandID, m.raw).Scan(&units)
+		ct, err := tx.Exec(ctx, `
+			UPDATE facts SET model_id=$3, status='confirmed'
+			 WHERE brand_id=$1 AND raw_model=$2 AND model_id IS NULL AND status='unresolved'`,
+			m.brandID, m.raw, m.modelID)
+		if err != nil {
+			return out, err
+		}
+		out.ModelRows += int(ct.RowsAffected())
+		out.ModelVolume += units
+	}
+
+	if dryRun {
+		return out, tx.Rollback(ctx)
+	}
+	if out.BrandRows > 0 || out.ModelRows > 0 {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO change_log (entity_type, action, actor_kind, volume_impact)
+			VALUES ('facts','deterministic_reresolve','agent',$1)`,
+			out.BrandVolume+out.ModelVolume); err != nil {
+			return out, err
+		}
+	}
+	return out, tx.Commit(ctx)
+}

@@ -230,7 +230,8 @@ func (s *Server) resolveBrand(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"brand_id": brandID, "facts_rederived": units})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"brand_id": brandID, "facts_rederived": units, "replay": s.replayLadder(r)})
 }
 
 func (s *Server) reviewNewModel(w http.ResponseWriter, r *http.Request) {
@@ -253,5 +254,6 @@ func (s *Server) reviewNewModel(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"model_id": modelID, "facts_rederived": units})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"model_id": modelID, "facts_rederived": units, "replay": s.replayLadder(r)})
 }

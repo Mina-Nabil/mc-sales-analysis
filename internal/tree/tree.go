@@ -84,7 +84,7 @@ func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, c
 	var id int64
 	err := pool.QueryRow(ctx, `
 		INSERT INTO models (brand_id, name, car_type, segment_id, status)
-		VALUES ($1,$2,$3,$4,$5,'confirmed') RETURNING id`,
+		VALUES ($1,$2,$3,$4,'confirmed') RETURNING id`,
 		brandID, name, nullIf(carType), segmentID).Scan(&id)
 	if err != nil {
 		return 0, "", fmt.Errorf("create model: %w", err)

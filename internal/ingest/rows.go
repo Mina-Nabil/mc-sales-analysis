@@ -9,11 +9,13 @@ import (
 // AnnotatedRow is one parsed feed row exactly as the sheet carries it, plus how
 // it resolved against the car tree — this is what the dry-run preview shows.
 type AnnotatedRow struct {
-	Gov    string `json:"gov"`
-	Unit   string `json:"unit"`
-	Brand  string `json:"brand"`
-	Model  string `json:"model"`
-	Volume int    `json:"volume"`
+	Gov   string `json:"gov"`
+	Unit  string `json:"unit"`
+	Brand string `json:"brand"`
+	Model string `json:"model"`
+	// ModelYear is 0 when the feed carried none (rendered as "—").
+	ModelYear int `json:"model_year"`
+	Volume    int `json:"volume"`
 	// resolved | new_model | new_brand | motorcycle
 	Status     string `json:"status"`
 	CanonBrand string `json:"canon_brand,omitempty"`
@@ -56,7 +58,8 @@ func AnnotateRows(ctx context.Context, pool *pgxpool.Pool, pf *ParsedFeed) ([]An
 	for _, row := range pf.Rows {
 		a := AnnotatedRow{
 			Gov: row.RawGov, Unit: row.RawUnit,
-			Brand: row.RawBrand, Model: row.RawModel, Volume: row.Volume,
+			Brand: row.RawBrand, Model: row.RawModel,
+			ModelYear: row.ModelYear, Volume: row.Volume,
 		}
 		if exclude && res.isMotorcycle(row.RawBrand, row.RawModel) {
 			a.Status = "motorcycle"

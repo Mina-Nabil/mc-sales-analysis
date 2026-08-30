@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Mina-Nabil/mc-sales-analysis/internal/domain"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/xuri/excelize/v2"
@@ -15,7 +16,10 @@ import (
 // FeedRow is one parsed fact from a monthly primary feed.
 type FeedRow struct {
 	RawGov, RawUnit, RawBrand, RawModel string
-	Volume                              int
+	// ModelYear is the vehicle's year of manufacture (سنة الصنع). 0 means the
+	// feed did not carry one — stored as NULL, surfaced as 'Unknown'.
+	ModelYear int
+	Volume    int
 }
 
 // ParsedFeed is the result of detecting + parsing an uploaded file.
@@ -26,6 +30,9 @@ type ParsedFeed struct {
 	Year, Month int
 	Rows        []FeedRow
 	TotalVolume int
+	// ModelYears lists the year columns the sheet carried, in sheet order.
+	// Empty for the by-status feed, which has no manufacture year at all.
+	ModelYears []int
 }
 
 var periodRe = regexp.MustCompile(`من\s*(\d{4})/(\d{1,2})/(\d{1,2})`)
@@ -33,8 +40,9 @@ var periodRe = regexp.MustCompile(`من\s*(\d{4})/(\d{1,2})/(\d{1,2})`)
 // DetectAndParse identifies the file's signature/role/period and parses it,
 // taking the period from the sheet title (the traffic-authority `من YYYY/MM/DD`
 // header). Used by the CLI import path.
-// Only the primary feed (brands_models_by_status) is implemented here; other
-// signatures return a clear "unsupported" error rather than mis-parsing (§4.1).
+// Two signatures are recognised — brands_models_by_year (preferred: it carries
+// the manufacture year) and brands_models_by_status. Anything else returns a
+// clear "unsupported" error rather than mis-parsing (§4.1).
 func DetectAndParse(path string) (*ParsedFeed, error) {
 	return DetectAndParseWithPeriod(path, 0, 0)
 }
@@ -62,9 +70,22 @@ func DetectAndParseWithPeriod(path string, yearOverride, monthOverride int) (*Pa
 
 	title := cell(rows, 0, 0)
 	header := rows[1] // row 2: dimension labels
-	sub := rows[2]    // row 3: status sub-columns
+	sub := rows[2]    // row 3: measure sub-columns
 
-	if !isPrimaryStatusFeed(header, sub) {
+	// Two signatures are supported. The by-model-year report is preferred — it
+	// is an exact decomposition of the by-status feed's Zero column and carries
+	// the manufacture year — but a month delivered only in the older shape still
+	// imports, with model_year left NULL.
+	var parse func(*ParsedFeed, [][]string) error
+	switch {
+	case isModelYearFeed(header, sub):
+		if err := rejectPrivatePlateVariant(title); err != nil {
+			return nil, err
+		}
+		parse = parseByModelYear
+	case isPrimaryStatusFeed(header, sub):
+		parse = parseByStatus
+	default:
 		return nil, fmt.Errorf("unrecognised header signature — refusing to guess.\n  row2=%v\n  row3=%v", header, sub)
 	}
 
@@ -78,33 +99,115 @@ func DetectAndParseWithPeriod(path string, yearOverride, monthOverride int) (*Pa
 		return nil, fmt.Errorf("invalid period %04d-%02d", yr, mo)
 	}
 
-	pf := &ParsedFeed{
-		Path: path, Signature: "brands_models_by_status", Role: "primary",
-		Year: yr, Month: mo,
+	pf := &ParsedFeed{Path: path, Role: "primary", Year: yr, Month: mo}
+	if err := parse(pf, rows); err != nil {
+		return nil, err
 	}
-	// Forward-fill governorate (col 1) and unit (col 2); volume = Zero (col 6).
+	return pf, nil
+}
+
+// parseByStatus reads the older brands × models × vehicle-status feed. Volume is
+// the Zero column (col 6); the sheet carries no manufacture year.
+func parseByStatus(pf *ParsedFeed, rows [][]string) error {
+	pf.Signature = "brands_models_by_status"
+	// Forward-fill governorate (col 1) and unit (col 2).
 	var lastGov, lastUnit string
 	for i := 3; i < len(rows); i++ {
 		r := rows[i]
-		gov := col(r, 1)
-		unit := col(r, 2)
-		if strings.TrimSpace(gov) != "" {
+		if gov := col(r, 1); strings.TrimSpace(gov) != "" {
 			lastGov = gov
 		}
-		if strings.TrimSpace(unit) != "" {
+		if unit := col(r, 2); strings.TrimSpace(unit) != "" {
 			lastUnit = unit
 		}
-		brand := col(r, 3)
-		model := col(r, 4)
+		brand, model := col(r, 3), col(r, 4)
 		if strings.TrimSpace(brand) == "" && strings.TrimSpace(model) == "" {
 			continue // subtotal / blank
 		}
 		vol := parseInt(col(r, 6)) // Zero column
-		row := FeedRow{RawGov: lastGov, RawUnit: lastUnit, RawBrand: brand, RawModel: model, Volume: vol}
-		pf.Rows = append(pf.Rows, row)
+		pf.Rows = append(pf.Rows, FeedRow{
+			RawGov: lastGov, RawUnit: lastUnit, RawBrand: brand, RawModel: model, Volume: vol})
 		pf.TotalVolume += vol
 	}
-	return pf, nil
+	return nil
+}
+
+// parseByModelYear reads the "zero vehicles by year of manufacture" report and
+// unpivots it: one source row becomes one fact per non-empty year cell.
+//
+// The year block is read from row 3 every time — the authority slides the window
+// (Jan/Feb 2026 report 2022–2026, Mar onward 2023–2027), so column offsets must
+// never be hard-coded. If a row's year cells do not add up to its own grand
+// total, the difference is emitted as a single model-year-unknown row, so the
+// period still reconciles exactly (§8.1) rather than silently losing units.
+func parseByModelYear(pf *ParsedFeed, rows [][]string) error {
+	pf.Signature = "brands_models_by_year"
+
+	yearCols := map[int]int{} // column index → model year
+	for i, v := range rows[2] {
+		if y := parseInt(v); y >= 1980 && y <= 2100 && len(strings.TrimSpace(v)) == 4 {
+			yearCols[i] = y
+			pf.ModelYears = append(pf.ModelYears, y)
+		}
+	}
+	if len(yearCols) == 0 {
+		return fmt.Errorf("model-year feed has no year columns in row 3: %v", rows[2])
+	}
+	sort.Ints(pf.ModelYears)
+
+	totalCol := -1
+	for i, h := range rows[1] {
+		if strings.Contains(h, "الإجمالي العام") {
+			totalCol = i
+		}
+	}
+
+	var lastGov, lastUnit string
+	for i := 3; i < len(rows); i++ {
+		r := rows[i]
+		// the trailing grand-total row carries the label in place of a governorate
+		if strings.Contains(col(r, 0), "الإجمالي العام") || strings.Contains(col(r, 1), "الإجمالي العام") {
+			continue
+		}
+		if gov := col(r, 1); strings.TrimSpace(gov) != "" {
+			lastGov = gov
+		}
+		if unit := col(r, 2); strings.TrimSpace(unit) != "" {
+			lastUnit = unit
+		}
+		brand, model := col(r, 3), col(r, 4)
+		if strings.TrimSpace(brand) == "" && strings.TrimSpace(model) == "" {
+			continue // subtotal / blank
+		}
+
+		base := FeedRow{RawGov: lastGov, RawUnit: lastUnit, RawBrand: brand, RawModel: model}
+		var spread int
+		for ci, year := range yearCols {
+			v := strings.TrimSpace(col(r, ci))
+			if v == "" {
+				continue
+			}
+			vol := parseInt(v)
+			if vol == 0 {
+				continue
+			}
+			row := base
+			row.ModelYear, row.Volume = year, vol
+			pf.Rows = append(pf.Rows, row)
+			pf.TotalVolume += vol
+			spread += vol
+		}
+		// Residual guard: never let a truncated year block drop units.
+		if totalCol >= 0 {
+			if grand := parseInt(col(r, totalCol)); grand > spread {
+				row := base
+				row.ModelYear, row.Volume = 0, grand-spread
+				pf.Rows = append(pf.Rows, row)
+				pf.TotalVolume += row.Volume
+			}
+		}
+	}
+	return nil
 }
 
 func isPrimaryStatusFeed(header, sub []string) bool {
@@ -117,6 +220,37 @@ func isPrimaryStatusFeed(header, sub []string) bool {
 	}
 	s := strings.Join(sub, "|")
 	return strings.Contains(s, "Zero") && strings.Contains(s, "Used")
+}
+
+// isModelYearFeed recognises the by-year-of-manufacture report: same first five
+// columns as the by-status feed, but the measure block is سنة الصنع with 4-digit
+// year sub-columns (and the model column is الموديل, not الطراز).
+func isModelYearFeed(header, sub []string) bool {
+	h := strings.Join(header, "|")
+	for _, n := range []string{"محافظة الإصدار", "المنفذ", "الماركة", "سنة الصنع"} {
+		if !strings.Contains(h, n) {
+			return false
+		}
+	}
+	for _, v := range sub {
+		if y := parseInt(v); y >= 1980 && y <= 2100 && len(strings.TrimSpace(v)) == 4 {
+			return true
+		}
+	}
+	return false
+}
+
+// rejectPrivatePlateVariant refuses the look-alike that ships in the same
+// archive: تقرير … المركبات الملاكي … is private plates only and has an
+// identical header signature, but roughly a third of the units (Jul-2026:
+// 22,378 vs 63,219). Matching on the NORMALIZED title matters — these sheets
+// carry tatweel elongation throughout, so a raw substring test is unreliable.
+func rejectPrivatePlateVariant(title string) error {
+	if strings.Contains(domain.Normalize(title), domain.Normalize("المركبات الملاكي")) {
+		return fmt.Errorf("this is the private-plate (الملاكي) report, which covers only part of the market — " +
+			"upload the all-vehicles report (تقرير بماركات وطرازات المركبات المرخصة لأول مرة) instead")
+	}
+	return nil
 }
 
 func detectPeriod(title string) (int, int, error) {
@@ -145,10 +279,13 @@ type DryRunReport struct {
 	TierVol                           map[string]int
 	BrandResolved, BrandModelResolved int
 	NewBrands, NewModels              []NewItem
-	PrevPeriodLabel                   string
-	PrevPeriodVolume                  int
-	SwingPct                          float64
-	ExistingBatchForPeriod            bool
+	// YearMix is car units by model year (0 = the feed carried none for that row).
+	YearMix                map[int]int
+	UnknownYearVol         int
+	PrevPeriodLabel        string
+	PrevPeriodVolume       int
+	SwingPct               float64
+	ExistingBatchForPeriod bool
 }
 
 func settingBool(ctx context.Context, pool *pgxpool.Pool, key string, def bool) bool {
@@ -168,6 +305,7 @@ func DryRun(ctx context.Context, pool *pgxpool.Pool, pf *ParsedFeed) (*DryRunRep
 		Feed:               pf,
 		ExcludeMotorcycles: settingBool(ctx, pool, "ingest.exclude_motorcycles", true),
 		TierRows:           map[string]int{}, TierVol: map[string]int{},
+		YearMix: map[int]int{},
 	}
 	newBrandVol := map[string]int{}
 	newModelVol := map[string]int{}
@@ -182,6 +320,10 @@ func DryRun(ctx context.Context, pool *pgxpool.Pool, pf *ParsedFeed) (*DryRunRep
 		}
 		rep.CarRows++
 		rep.CarVolume += row.Volume
+		rep.YearMix[row.ModelYear] += row.Volume
+		if row.ModelYear == 0 {
+			rep.UnknownYearVol += row.Volume
+		}
 		bid, btier := res.brandT(row.RawBrand)
 		if bid == 0 {
 			rep.TierRows["unresolved"]++
@@ -317,7 +459,7 @@ func Commit(ctx context.Context, pool *pgxpool.Pool, pf *ParsedFeed, reason stri
 
 	cols := []string{
 		"raw_governorate", "raw_unit", "raw_brand", "raw_model",
-		"period_year", "period_month", "volume",
+		"period_year", "period_month", "volume", "model_year",
 		"brand_id", "model_id", "governorate_id", "traffic_unit_id",
 		"import_batch_id", "status",
 	}
@@ -336,7 +478,7 @@ func Commit(ctx context.Context, pool *pgxpool.Pool, pf *ParsedFeed, reason stri
 		}
 		return []any{
 			row.RawGov, row.RawUnit, row.RawBrand, row.RawModel,
-			int16(pf.Year), int16(pf.Month), row.Volume,
+			int16(pf.Year), int16(pf.Month), row.Volume, nzYear(row.ModelYear),
 			nz(bid), nz(mid), nz(gid), nz(uid), batchID, status,
 		}, nil
 	})
@@ -426,6 +568,14 @@ func baseName(p string) string {
 		return p[i+1:]
 	}
 	return p
+}
+
+// nzYear stores an unknown model year as NULL rather than 0.
+func nzYear(y int) any {
+	if y == 0 {
+		return nil
+	}
+	return int16(y)
 }
 
 func nzStr(s string) any {

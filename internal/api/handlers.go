@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -96,7 +97,8 @@ func (s *Server) reviewConfirm(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"facts_rederived": moved})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"facts_rederived": moved, "replay": s.replayLadder(r)})
 }
 
 func (s *Server) reviewReassign(w http.ResponseWriter, r *http.Request) {
@@ -117,7 +119,8 @@ func (s *Server) reviewReassign(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"facts_rederived": moved})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"facts_rederived": moved, "replay": s.replayLadder(r)})
 }
 
 func (s *Server) reviewReject(w http.ResponseWriter, r *http.Request) {
@@ -133,6 +136,24 @@ func (s *Server) reviewReject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
 }
 
+func (s *Server) reviewExclude(w http.ResponseWriter, r *http.Request) {
+	id, err := pathInt(r, "id")
+	if err != nil {
+		httpErr(w, http.StatusBadRequest, "bad id")
+		return
+	}
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = readJSON(r, &req) // body optional
+	units, err := review.Exclude(r.Context(), s.pool, id, req.Reason)
+	if err != nil {
+		httpErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "excluded", "excluded_volume": units})
+}
+
 func (s *Server) reviewBulkConfirm(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		MinConfidence float64 `json:"min_confidence"`
@@ -146,18 +167,39 @@ func (s *Server) reviewBulkConfirm(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]int{"confirmed": n, "facts_rederived": vol})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"confirmed": n, "facts_rederived": vol, "replay": s.replayLadder(r)})
+}
+
+// replayLadder re-runs the deterministic resolution ladder over facts that are
+// still unresolved. Writing an alias only re-derives that exact raw spelling;
+// this picks up sibling spellings already in the table so the same string does
+// not come back to the queue. Best-effort: a failure here never fails the
+// decision the user just made.
+func (s *Server) replayLadder(r *http.Request) ingest.ReresolveResult {
+	res, err := ingest.ReresolveUnresolved(r.Context(), s.pool)
+	if err != nil {
+		log.Printf("reresolve: %v", err)
+	}
+	return res
 }
 
 func (s *Server) resolve(w http.ResponseWriter, r *http.Request) {
 	thr := s.floatSetting(r, "fuzzy_threshold", 0.92)
 	floor := s.floatSetting(r, "fuzzy_review_floor", 0.75)
+	// Deterministic tiers first — anything they can settle must never be left
+	// to fuzzy, which has thresholds and guards.
+	replay := s.replayLadder(r)
 	res, err := review.Resolve(r.Context(), s.pool, thr, floor)
 	if err != nil {
 		httpErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, res)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"distinct": res.Distinct, "auto_resolved": res.AutoResolved,
+		"proposed": res.Proposed, "new_model_candidate": res.NewModelCandidate,
+		"auto_volume": res.AutoVolume, "replay": replay,
+	})
 }
 
 // ── car tree (read) ─────────────────────────────────────────────────────────
@@ -396,6 +438,7 @@ func (s *Server) importCommit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = analytics.RefreshModelDefaults(r.Context(), s.pool) // keep model specs current
+	s.replayLadder(r)                                       // pick up sibling spellings
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -562,6 +605,9 @@ func dryRunDTO(rep *ingest.DryRunReport) map[string]any {
 		"existing_batch":       rep.ExistingBatchForPeriod,
 		"new_brands":           conv(rep.NewBrands),
 		"new_models":           conv(rep.NewModels),
+		"model_years":          rep.Feed.ModelYears,
+		"year_mix":             rep.YearMix,
+		"unknown_year_volume":  rep.UnknownYearVol,
 	}
 }
 

@@ -62,6 +62,7 @@ export const api = {
   review: (limit = 100) => req('GET', `/review?limit=${limit}`),
   confirm: (id: number, modelID?: number) => req('POST', `/review/${id}/confirm`, modelID ? { model_id: modelID } : {}),
   reject: (id: number) => req('POST', `/review/${id}/reject`, {}),
+  exclude: (id: number, reason = '') => req('POST', `/review/${id}/exclude`, { reason }),
   reassign: (id: number, modelID: number) => req('POST', `/review/${id}/reassign`, { model_id: modelID }),
   bulkConfirm: (min: number) => req('POST', '/review/bulk-confirm', { min_confidence: min }),
   resolve: () => req('POST', '/resolve', {}),
