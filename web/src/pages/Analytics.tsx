@@ -17,7 +17,7 @@ const labelOf = (k: string) => FILTER_DIMS.find((d) => d[0] === k)?.[1] || k
 const DIM_GROUPS: [string, string[]][] = [
   ['Brand', ['brand', 'origin', 'distributor']],
   ['Model', ['model', 'segment', 'car_type', 'engine', 'supply']],
-  ['Facts', ['governorate', 'traffic_unit', 'region', 'model_year', 'model_age']],
+  ['Facts', ['governorate', 'traffic_unit', 'region', 'model_year']],
 ]
 
 const PIES_KEY = 'mc.analytics.pies'

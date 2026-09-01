@@ -6,7 +6,7 @@ export const FILTER_DIMS: [string, string][] = [
   ['brand', 'Brand'], ['model', 'Model'], ['segment', 'Segment'],
   ['car_type', 'Car type'], ['engine', 'Engine'], ['origin', 'Origin'], ['supply', 'Supply'],
   ['distributor', 'Distributor'], ['region', 'Region'], ['governorate', 'Governorate'], ['traffic_unit', 'Traffic unit'],
-  ['model_year', 'Model year'], ['model_age', 'Model age'],
+  ['model_year', 'Model year'],
 ]
 const labelOf = (k: string) => FILTER_DIMS.find((d) => d[0] === k)?.[1] || k
 

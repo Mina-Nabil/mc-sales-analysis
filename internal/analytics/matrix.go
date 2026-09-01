@@ -33,13 +33,10 @@ var dimensions = map[string]string{
 	// Fact-level, not JOIN-derived: model year is observed source data, part of
 	// the row's own identity like volume, so §2.5 still holds.
 	"model_year": "COALESCE(f.model_year::text,'Unknown')",
-	// Age at registration, which stays comparable across years in a way the raw
-	// year cannot: -1 is next year's model, 0 the current one.
-	"model_age": "CASE WHEN f.model_year IS NULL THEN 'Unknown' ELSE (f.period_year - f.model_year)::text END",
 }
 
 // chronological dimensions read badly ranked by volume — order them by key.
-var orderedByKey = map[string]bool{"model_year": true, "model_age": true}
+var orderedByKey = map[string]bool{"model_year": true}
 
 // extraFilters are filter keys that are NOT dimensions. Everything else filters
 // on the dimension expression itself — see filterExpr.

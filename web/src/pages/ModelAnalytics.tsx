@@ -12,13 +12,24 @@ const MODEL_COLORS = ['var(--acc)', 'var(--info)'] // A, B
 const selCls = 'h-9 rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-2.5 text-[13px] text-t0'
 const fieldCls = 'h-9 w-full rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-3 text-[13px] text-t0 focus:border-acc'
 
-type Measure = 'total' | 'region' | 'governorate' | 'traffic_unit'
+type Measure = 'total' | 'model_year' | 'engine' | 'region' | 'governorate' | 'traffic_unit'
 const MEASURES: [Measure, string][] = [
   ['total', 'Total sales'],
+  ['model_year', 'By model year'],
+  ['engine', 'By engine'],
   ['region', 'By region'],
   ['governorate', 'By governorate'],
   ['traffic_unit', 'By traffic unit'],
 ]
+// Model year reads as a sequence, not a ranking — order those keys oldest-first
+// (Unknown last) instead of by volume, so both the chart legend and the figures
+// table below it follow the calendar.
+const CHRONOLOGICAL: Partial<Record<Measure, boolean>> = { model_year: true }
+const cmpChronological = (a: string, b: string) => {
+  const na = Number(a), nb = Number(b)
+  if (isNaN(na) !== isNaN(nb)) return isNaN(na) ? 1 : -1 // 'Unknown' last
+  return isNaN(na) ? a.localeCompare(b) : na - nb
+}
 const TOP_N = 8
 
 // The specs compared side by side. Each reads one field off the model detail.
@@ -456,6 +467,7 @@ function SalesGraph({ models, year, measure, scope, ready, onMeasure, onScope }:
             totals.set(r.key, (totals.get(r.key) || 0) + r.months.reduce((s: number, v: number) => s + v, 0))))
           let keys = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k)
           if (!scope.length) keys = keys.slice(0, TOP_N)
+          if (CHRONOLOGICAL[measure]) keys = keys.sort(cmpChronological)
           obj = Object.fromEntries(Object.entries(obj).map(([id, rows]) => {
             const byKey = new Map((rows as any[]).map((r) => [r.key, r]))
             return [Number(id), keys.map((k) => byKey.get(k) || { key: k, months: Array(12).fill(0) })]
@@ -548,8 +560,8 @@ function SalesGraph({ models, year, measure, scope, ready, onMeasure, onScope }:
         total: rows.reduce((s, r) => s + r.total, 0),
         months: MONTHS.map((_, mi) => rows.reduce((s, r) => s + (r.months[mi] || 0), 0)),
       }))
-      .sort((a, b) => b.total - a.total)
-  }, [tableRows, groupByValue])
+      .sort((a, b) => (CHRONOLOGICAL[measure] ? cmpChronological(a.key, b.key) : b.total - a.total))
+  }, [tableRows, groupByValue, measure])
 
   return (
     <Card>

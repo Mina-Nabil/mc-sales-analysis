@@ -248,9 +248,10 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
 - Growth % is **YTD-based** (same month window both years) so a partial current
   year compares fairly. Shares/ranks/share-point-delta computed in Go from the
   grouped rows. Distributor dim uses an effective-dated LATERAL join.
-- `model_year` and `model_age` (`period_year - model_year`) are the only
-  fact-level dimensions; both COALESCE to 'Unknown' and are sorted numerically
-  (Unknown last) rather than by volume. Excluded facts (`status='rejected'`) are
+- `model_year` is the only fact-level dimension; it COALESCEs to 'Unknown' and is
+  sorted chronologically (Unknown last) rather than by volume. It is also a
+  comparison dimension on the Model Comparison page's Monthly sales graph,
+  alongside `engine`. Excluded facts (`status='rejected'`) are
   filtered out of `Matrix`/`Values`/`Aggregate`/`Timeseries` by `notExcluded`.
 - **Filters derive from the dimension expressions** (`filterExpr`), never a
   parallel map. The filter picker is fed by `Values()`, which returns *dimension*
