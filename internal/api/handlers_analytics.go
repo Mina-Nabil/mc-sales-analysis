@@ -25,8 +25,15 @@ func parseMatrixParams(r *http.Request) analytics.Params {
 		p.CompareYear = p.Year - 1
 	}
 	for key, vals := range q {
-		if strings.HasPrefix(key, "filter.") && len(vals) > 0 && vals[0] != "" {
+		if len(vals) == 0 || vals[0] == "" {
+			continue
+		}
+		// filter.X includes; exclude.X excludes ("exclude data from:"). Both live
+		// in one map — analytics.filterWhere reads the "!" prefix as negation.
+		if strings.HasPrefix(key, "filter.") {
 			p.Filters[strings.TrimPrefix(key, "filter.")] = splitCSV(vals[0])
+		} else if strings.HasPrefix(key, "exclude.") {
+			p.Filters["!"+strings.TrimPrefix(key, "exclude.")] = splitCSV(vals[0])
 		}
 	}
 	return p

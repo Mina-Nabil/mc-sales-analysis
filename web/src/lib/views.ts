@@ -8,7 +8,24 @@ export type ViewConfig = {
   pies: string[]
   tables: string[]
   filters: Record<string, string[]>
+  /** Values to leave out of every card — the red "Exclude data from:" row. */
+  excludes?: Record<string, string[]>
   year: string
+  /** Built-in cards (monthly volume, top brands, leaderboard). Absent = on,
+   *  so views saved before this flag existed keep showing them. */
+  builtins?: boolean
+}
+
+/** A report page with no cards at all — the "Empty New Report" starting point. */
+export const emptyViewConfig = (): ViewConfig => ({
+  kind: 'brand', bars: [], pies: [], tables: [], filters: {}, excludes: {}, year: 'all', builtins: false,
+})
+
+/** "New Report", then "New Report 2", … so the sidebar never shows two alike. */
+export function nextReportName(views: SavedView[], base = 'New Report'): string {
+  const taken = new Set(views.map((v) => v.name))
+  if (!taken.has(base)) return base
+  for (let i = 2; ; i++) if (!taken.has(`${base} ${i}`)) return `${base} ${i}`
 }
 
 // Model Comparison view: the two models + the graph controls.

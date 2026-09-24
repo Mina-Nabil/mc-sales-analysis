@@ -3,8 +3,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmt } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardSubtitle, Badge, Button, Modal, Input } from '@/components/ui'
 import { AreaLineChart, BarChart, DonutChart, StackedBarChart } from '@/components/charts'
-import { FilterBar, useFilters, FILTER_DIMS } from '@/components/FilterBar'
-import { useViews, type ViewConfig } from '@/lib/views'
+import { FilterBar, useFilters, FILTER_DIMS, PREFIX } from '@/components/FilterBar'
+import { useViews, viewKind, type ViewConfig } from '@/lib/views'
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const PALETTE = ['var(--acc)', 'var(--info)', 'var(--ok)', 'var(--warn)', 'var(--bad)', 'var(--acc-2)', '#c084fc', '#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#38bdf8', '#818cf8']
@@ -33,7 +33,7 @@ const loadSaved = (key: string, fallback: string[]): string[] => {
 
 export default function Analytics() {
   const [sp, setSp] = useSearchParams()
-  const { filters, qs: filterQsFn } = useFilters()
+  const { filters, excludes, qs: filterQsFn } = useFilters()
   const { id } = useParams()
   const viewId = id ? Number(id) : null
   const navigate = useNavigate()
@@ -49,6 +49,9 @@ export default function Analytics() {
   const [pies, setPies] = useState<string[]>(() => loadSaved(PIES_KEY, ['segment']))
   const [bars, setBars] = useState<string[]>(() => loadSaved(BARS_KEY, []))
   const [tables, setTables] = useState<string[]>(() => loadSaved(TABLES_KEY, []))
+  // Built-in cards (monthly volume, top brands, leaderboard). An "Empty New
+  // Report" starts with them off; every other view keeps them.
+  const [builtins, setBuiltins] = useState(true)
   const [name, setName] = useState('')
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [nameModal, setNameModal] = useState(false)
@@ -56,7 +59,7 @@ export default function Analytics() {
   const hydratedRef = useRef<number | null>(null)
   const lastSavedRef = useRef<string>('')
   const settledRef = useRef(true) // false while the URL is being forced to a just-loaded view
-  const targetRef = useRef<{ f: Record<string, string[]>; y: string } | null>(null)
+  const targetRef = useRef<{ f: Record<string, string[]>; y: string; x: Record<string, string[]> } | null>(null)
   // Mirrored as state so gating re-renders: nothing may fetch until a view's
   // filters/year have actually landed in the URL, otherwise an early request
   // built from the previous page's params can resolve last and win.
@@ -67,10 +70,11 @@ export default function Analytics() {
 
   const qs = useMemo(() => {
     const p = new URLSearchParams()
-    for (const d in filters) p.set('filter.' + d, filters[d].join(','))
+    for (const d in filters) p.set(PREFIX.include + d, filters[d].join(','))
+    for (const d in excludes) p.set(PREFIX.exclude + d, excludes[d].join(','))
     if (year !== 'all') p.set('year', year)
     return p.toString()
-  }, [JSON.stringify(filters), year]) // eslint-disable-line
+  }, [JSON.stringify(filters), JSON.stringify(excludes), year]) // eslint-disable-line
 
   // Bar charts are month-of-year, so they need a concrete year — the selected
   // one, or the latest available when "All time" is chosen.
@@ -97,11 +101,14 @@ export default function Analytics() {
   // ── saved-view sync ─────────────────────────────────────────────────────────
   const sanitize = (f: Record<string, string[]>) =>
     Object.fromEntries(Object.entries(f).filter(([, v]) => Array.isArray(v) && v.length))
-  const keyOf = (b: string[], p: string[], t: string[], f: Record<string, string[]>, y: string) =>
-    JSON.stringify({ b, p, t, f: Object.keys(f).sort().map((k) => k + '=' + [...f[k]].sort().join(',')).join('&'), y })
-  const applyToUrl = (f: Record<string, string[]>, y: string) => {
+  const flat = (f: Record<string, string[]>) =>
+    Object.keys(f).sort().map((k) => k + '=' + [...f[k]].sort().join(',')).join('&')
+  const keyOf = (b: string[], p: string[], t: string[], f: Record<string, string[]>, y: string, bi = true, x: Record<string, string[]> = {}) =>
+    JSON.stringify({ b, p, t, f: flat(f), y, bi, x: flat(x) })
+  const applyToUrl = (f: Record<string, string[]>, y: string, x: Record<string, string[]> = {}) => {
     const n = new URLSearchParams()
-    for (const d in f) if (f[d]?.length) n.set('filter.' + d, f[d].join(','))
+    for (const d in f) if (f[d]?.length) n.set(PREFIX.include + d, f[d].join(','))
+    for (const d in x) if (x[d]?.length) n.set(PREFIX.exclude + d, x[d].join(','))
     if (y && y !== 'all') n.set('year', y)
     setSp(n, { replace: true })
   }
@@ -111,6 +118,7 @@ export default function Analytics() {
     if (viewId == null) {
       hydratedRef.current = null; settledRef.current = true; targetRef.current = null; setSettled(true)
       setBars(loadSaved(BARS_KEY, [])); setPies(loadSaved(PIES_KEY, ['segment'])); setTables(loadSaved(TABLES_KEY, []))
+      setBuiltins(true)
       return
     }
     if (!view || hydratedRef.current === viewId) return
@@ -119,15 +127,17 @@ export default function Analytics() {
     const p = Array.isArray(cfg.pies) ? cfg.pies : []
     const t = Array.isArray(cfg.tables) ? cfg.tables : []
     const f = sanitize(cfg.filters && typeof cfg.filters === 'object' ? cfg.filters : {})
+    const x = sanitize(cfg.excludes && typeof cfg.excludes === 'object' ? cfg.excludes : {})
     const y = typeof cfg.year === 'string' ? cfg.year : 'all'
-    setBars(b); setPies(p); setTables(t); setName(view.name)
-    lastSavedRef.current = keyOf(b, p, t, f, y)
+    const bi = cfg.builtins !== false
+    setBars(b); setPies(p); setTables(t); setBuiltins(bi); setName(view.name)
+    lastSavedRef.current = keyOf(b, p, t, f, y, bi, x)
     hydratedRef.current = viewId
-    targetRef.current = { f, y }
+    targetRef.current = { f, y, x }
     settledRef.current = false // keep forcing the URL to this view until it sticks
     setSettled(false)
     setSaveStatus('saved')
-    applyToUrl(f, y)
+    applyToUrl(f, y, x)
   }, [viewId, view]) // eslint-disable-line
 
   // Force the URL year/filters to the loaded view until they match — the page
@@ -136,25 +146,26 @@ export default function Analytics() {
   useLayoutEffect(() => {
     const tgt = targetRef.current
     if (viewId == null || tgt == null || settledRef.current) return
-    const cur = keyOf([], [], [], sanitize(filters), year)
-    if (cur === keyOf([], [], [], tgt.f, tgt.y)) { settledRef.current = true; setSettled(true) }
-    else applyToUrl(tgt.f, tgt.y)
+    const cur = keyOf([], [], [], sanitize(filters), year, true, sanitize(excludes))
+    if (cur === keyOf([], [], [], tgt.f, tgt.y, true, tgt.x)) { settledRef.current = true; setSettled(true) }
+    else applyToUrl(tgt.f, tgt.y, tgt.x)
   }) // runs every render until settled
 
   // Nothing saves on its own: changes are staged until Save changes / Save as new.
   const nameEdited = viewId != null && !!view && name.trim() !== '' && name !== view.name
   const cfgDirty = viewId != null && settled &&
-    keyOf(bars, pies, tables, sanitize(filters), year) !== lastSavedRef.current
+    keyOf(bars, pies, tables, sanitize(filters), year, builtins, sanitize(excludes)) !== lastSavedRef.current
   const dirty = cfgDirty || nameEdited
   useEffect(() => { if (dirty) setSaveStatus('idle') }, [dirty])
 
   const saveChanges = async () => {
     if (viewId == null || !view) return
     const f = sanitize(filters)
-    const k = keyOf(bars, pies, tables, f, year)
+    const x = sanitize(excludes)
+    const k = keyOf(bars, pies, tables, f, year, builtins, x)
     setSaveStatus('saving')
     try {
-      await saveConfig(viewId, { bars, pies, tables, filters: f, year })
+      await saveConfig(viewId, { bars, pies, tables, filters: f, excludes: x, year, builtins })
       if (nameEdited) await rename(viewId, name.trim())
       lastSavedRef.current = k
       setSaveStatus('saved')
@@ -171,7 +182,7 @@ export default function Analytics() {
 
   const saveAsNew = async () => {
     const nm = newName.trim(); if (!nm) return
-    const cfg: ViewConfig = { bars, pies, tables, filters: sanitize(filters), year }
+    const cfg: ViewConfig = { bars, pies, tables, filters: sanitize(filters), excludes: sanitize(excludes), year, builtins }
     try { const v = await create(nm, cfg); setNameModal(false); setNewName(''); navigate(`/analytics/view/${v.id}`) }
     catch { /* surfaced by the global loading bar */ }
   }
@@ -200,7 +211,7 @@ export default function Analytics() {
     return (
       <Card><div className="grid h-40 place-items-center text-[13px] text-t2">
         View not found.
-        <button onClick={() => navigate('/analytics')} className="ml-1 font-semibold text-acc">Go to Analytics</button>
+        <button onClick={() => navigate('/analytics')} className="ml-1 font-semibold text-acc">Go to Main Sales Report</button>
       </div></Card>
     )
   }
@@ -223,7 +234,7 @@ export default function Analytics() {
             </>
           ) : (
             <>
-              <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Analytics</h1>
+              <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Main Sales Report</h1>
               <p className="mt-1 text-[13px] text-t1">Registrations trend, brand &amp; segment breakdowns.</p>
             </>
           )}
@@ -251,9 +262,15 @@ export default function Analytics() {
         </div>
       </div>
 
-      <Card padding="sm"><FilterBar /></Card>
+      <Card padding="sm">
+        <div className="space-y-2">
+          <FilterBar />
+          <div className="border-t border-bad/25 pt-2"><FilterBar mode="exclude" /></div>
+        </div>
+      </Card>
 
       {/* 1 — monthly volume, full width */}
+      {builtins && (
       <Card>
         <CardHeader>
           <div><CardTitle>{year === 'all' ? 'Monthly volume' : `Monthly volume · ${year}`}</CardTitle>
@@ -266,6 +283,7 @@ export default function Analytics() {
           ? <AreaLineChart data={series.data} labels={series.labels} height={260} formatValue={(v) => fmt(v)} />
           : <Empty />}
       </Card>
+      )}
 
       {/* 2 — pie charts */}
       {pies.length > 0 && (
@@ -296,20 +314,20 @@ export default function Analytics() {
         </div>
       )}
 
-      {pies.length === 0 && bars.length === 0 && tables.length === 0 && (
+      {pies.length === 0 && bars.length === 0 && tables.length === 0 && !builtins && (
         <Card><div className="grid h-32 place-items-center text-center text-[13px] text-t2">
           No charts. Use <span className="mx-1 font-semibold text-t1">＋ Add table</span>, <span className="mx-1 font-semibold text-t1">＋ Add bar chart</span>, or <span className="mx-1 font-semibold text-t1">＋ Add pie chart</span> to add a breakdown.
         </div></Card>
       )}
 
-      {multiBrand && (
+      {builtins && multiBrand && (
         <Card>
           <CardHeader><div><CardTitle>Top brands</CardTitle><CardSubtitle>By units · {label}</CardSubtitle></div></CardHeader>
           {topBrands.length ? <BarChart data={topBrands} height={240} formatValue={(v) => fmt(v)} /> : <Empty />}
         </Card>
       )}
 
-      {multiBrand && (
+      {builtins && multiBrand && (
         <Card>
           <CardHeader><div><CardTitle>Brand leaderboard</CardTitle><CardSubtitle>Top 30 by volume · {label}</CardSubtitle></div></CardHeader>
           <div className="space-y-2.5">
@@ -329,6 +347,27 @@ export default function Analytics() {
           </div>
         </Card>
       )}
+
+      {/* Saved report pages — listed (and deletable) from the main report. */}
+      {viewId == null && (() => {
+        const mine = views.filter((v) => viewKind(v) === 'brand')
+        if (!mine.length) return null
+        return (
+          <Card>
+            <CardHeader><div><CardTitle>Saved reports</CardTitle>
+              <CardSubtitle>{mine.length} report page{mine.length === 1 ? '' : 's'} in the sidebar</CardSubtitle></div></CardHeader>
+            <div className="space-y-1">
+              {mine.map((v) => (
+                <div key={v.id} className="flex items-center gap-3 rounded-[var(--radius-vela-md)] px-2 py-1.5 hover:bg-bg-3">
+                  <button onClick={() => navigate(`/analytics/view/${v.id}`)}
+                    className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold text-t0 hover:text-acc">{v.name}</button>
+                  <Button variant="outline" size="sm" onClick={() => remove(v.id)}>Delete</Button>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )
+      })()}
 
       <Modal open={nameModal} onClose={() => setNameModal(false)} title="Save as new view" size="sm"
         footer={<><Button variant="ghost" onClick={() => setNameModal(false)}>Cancel</Button>

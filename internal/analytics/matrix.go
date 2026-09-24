@@ -56,7 +56,13 @@ var extraFilters = map[string]string{
 // so every value the picker offered matched nothing. The same drift made every
 // COALESCE'd bucket — 'Unknown', 'No distributor' — impossible to filter on,
 // because the filter expressions dropped the COALESCE.
+//
+// A key prefixed with "!" is an EXCLUDE filter ("exclude data from:" in the UI).
+// It carries the same dimension expression and the same picker values as its
+// positive twin — only the comparison is negated — so the two rows can never
+// drift apart the way a hand-written twin map did.
 func filterExpr(key string) (string, bool) {
+	key = strings.TrimPrefix(key, "!")
 	if expr, ok := extraFilters[key]; ok {
 		return expr, true
 	}
@@ -149,11 +155,7 @@ func Matrix(ctx context.Context, pool *pgxpool.Pool, p Params) (Result, error) {
 		args = append(args, vals)
 		return len(args)
 	}
-	for key, vals := range p.Filters {
-		if expr, ok := filterExpr(key); ok && len(vals) > 0 {
-			where = append(where, fmt.Sprintf("%s = ANY($%d)", expr, add(expr, vals)))
-		}
-	}
+	where = append(where, filterWhere(p.Filters, &args)...)
 	s1Idx := add("", s1)
 	s2Idx := add("", s2)
 
@@ -281,7 +283,10 @@ func needsDist(dimension string, f map[string][]string) bool {
 	if dimension == "distributor" {
 		return true
 	}
-	_, ok := f["distributor"]
+	if _, ok := f["distributor"]; ok {
+		return true
+	}
+	_, ok := f["!distributor"]
 	return ok
 }
 
@@ -309,16 +314,37 @@ func joinBlock(withDist bool) string {
 	return j
 }
 
-// filterWhere builds "expr = ANY($n)" conditions from p.Filters, appending to args.
+// filterWhere builds the WHERE conditions from a filter map, appending to args.
+// Plain keys include ("expr = ANY($n)"); "!"-prefixed keys exclude. The exclude
+// form also keeps NULL rows, which = ANY/<> ALL would otherwise drop — a
+// dimension without a COALESCE (e.g. an unresolved model) must survive an
+// exclusion it is not a member of, or period totals stop reconciling (§8.1).
 func filterWhere(f map[string][]string, args *[]any) []string {
 	var where []string
 	for key, vals := range f {
-		if expr, ok := filterExpr(key); ok && len(vals) > 0 {
-			*args = append(*args, vals)
+		expr, ok := filterExpr(key)
+		if !ok || len(vals) == 0 {
+			continue
+		}
+		*args = append(*args, vals)
+		if strings.HasPrefix(key, "!") {
+			where = append(where, fmt.Sprintf("(%s IS NULL OR %s <> ALL($%d))", expr, expr, len(*args)))
+		} else {
 			where = append(where, fmt.Sprintf("%s = ANY($%d)", expr, len(*args)))
 		}
 	}
 	return where
+}
+
+// onlyIncludes drops the "!"-prefixed (exclude) keys from a filter map.
+func onlyIncludes(f map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(f))
+	for k, v := range f {
+		if !strings.HasPrefix(k, "!") {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // Values returns the distinct values of a dimension (for filter option lists),
@@ -328,6 +354,9 @@ func Values(ctx context.Context, pool *pgxpool.Pool, dimension string, f map[str
 	if !ok {
 		return nil, fmt.Errorf("unknown dimension %q", dimension)
 	}
+	// Exclusions are ignored here on purpose: the picker must keep offering a
+	// value the user has already excluded, or they could never un-exclude it.
+	f = onlyIncludes(f)
 	var args []any
 	where := append([]string{notExcluded}, filterWhere(f, &args)...)
 	whereSQL := "WHERE " + strings.Join(where, " AND ")

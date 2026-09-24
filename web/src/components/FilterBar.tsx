@@ -10,39 +10,59 @@ export const FILTER_DIMS: [string, string][] = [
 ]
 const labelOf = (k: string) => FILTER_DIMS.find((d) => d[0] === k)?.[1] || k
 
+/** Filter rows: what to keep, and what to leave out. */
+export type FilterMode = 'include' | 'exclude'
+/** URL key prefix per row — `filter.brand=…` keeps, `exclude.brand=…` drops. */
+export const PREFIX: Record<FilterMode, string> = { include: 'filter.', exclude: 'exclude.' }
+
 /** Global filter state, stored in the URL so any view is shareable. */
 export function useFilters() {
   const [sp, setSp] = useSearchParams()
   const filters: Record<string, string[]> = {}
-  for (const [k, v] of sp.entries()) if (k.startsWith('filter.') && v) filters[k.slice(7)] = v.split(',')
+  const excludes: Record<string, string[]> = {}
+  for (const [k, v] of sp.entries()) {
+    if (!v) continue
+    if (k.startsWith(PREFIX.include)) filters[k.slice(PREFIX.include.length)] = v.split(',')
+    else if (k.startsWith(PREFIX.exclude)) excludes[k.slice(PREFIX.exclude.length)] = v.split(',')
+  }
 
-  const setFilter = (dim: string, values: string[]) =>
+  const setFilter = (dim: string, values: string[], mode: FilterMode = 'include') =>
     setSp((prev) => {
       const n = new URLSearchParams(prev)
-      if (values.length) n.set('filter.' + dim, values.join(',')); else n.delete('filter.' + dim)
+      if (values.length) n.set(PREFIX[mode] + dim, values.join(',')); else n.delete(PREFIX[mode] + dim)
       return n
     }, { replace: true })
 
-  const clearAll = () =>
+  const clearAll = (mode: FilterMode = 'include') =>
     setSp((prev) => {
       const n = new URLSearchParams(prev)
-      for (const k of [...n.keys()]) if (k.startsWith('filter.')) n.delete(k)
+      for (const k of [...n.keys()]) if (k.startsWith(PREFIX[mode])) n.delete(k)
       return n
     }, { replace: true })
 
+  // Both rows travel together: every card query must keep the same scope.
   const qs = () => {
     const p = new URLSearchParams()
-    for (const d in filters) p.set('filter.' + d, filters[d].join(','))
+    for (const d in filters) p.set(PREFIX.include + d, filters[d].join(','))
+    for (const d in excludes) p.set(PREFIX.exclude + d, excludes[d].join(','))
     return p.toString()
   }
-  return { filters, setFilter, clearAll, qs }
+  return { filters, excludes, setFilter, clearAll, qs }
 }
 
-export function FilterBar() {
-  const { filters, setFilter, clearAll } = useFilters()
+export function FilterBar({ mode = 'include' }: { mode?: FilterMode }) {
+  const { filters, excludes, setFilter, clearAll } = useFilters()
   const [open, setOpen] = useState<string | null>(null) // null | '__add__' | dim
   const ref = useRef<HTMLDivElement>(null)
-  const active = Object.keys(filters)
+  const isExclude = mode === 'exclude'
+  const current = isExclude ? excludes : filters
+  const active = Object.keys(current)
+  const set = (dim: string, vals: string[]) => setFilter(dim, vals, mode)
+  // Exclusions read as a warning, so they wear the danger token in both themes.
+  const chip = isExclude
+    ? 'border-bad/40 bg-bad-soft text-bad'
+    : 'border-acc/40 bg-acc-soft text-acc'
+  const xCls = isExclude ? 'text-bad/70 hover:text-bad' : 'text-acc/70 hover:text-acc'
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null) }
@@ -52,19 +72,23 @@ export function FilterBar() {
 
   return (
     <div className="relative flex flex-wrap items-center gap-2" ref={ref}>
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-t2"><path d="M22 3H2l8 9.46V19l4 2v-8.54z" /></svg>
+      <span className={'inline-flex items-center gap-1.5 text-[12px] font-bold ' + (isExclude ? 'text-bad' : 'text-t1')}>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 3H2l8 9.46V19l4 2v-8.54z" /></svg>
+        {isExclude ? 'Exclude data from:' : 'Include data from:'}
+      </span>
       {active.map((dim) => (
         <button key={dim} onClick={() => setOpen(open === dim ? null : dim)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-acc/40 bg-acc-soft px-2.5 py-1 text-[12px] font-semibold text-acc">
-          {labelOf(dim)}: {filters[dim].length > 2 ? `${filters[dim].length} selected` : filters[dim].join(', ')}
-          <span onClick={(e) => { e.stopPropagation(); setFilter(dim, []) }} className="text-acc/70 hover:text-acc">✕</span>
+          className={'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold ' + chip}>
+          {labelOf(dim)}: {current[dim].length > 2 ? `${current[dim].length} selected` : current[dim].join(', ')}
+          <span onClick={(e) => { e.stopPropagation(); set(dim, []) }} className={xCls}>✕</span>
         </button>
       ))}
       <button onClick={() => setOpen(open === '__add__' ? null : '__add__')}
-        className="inline-flex items-center gap-1 rounded-full border border-line bg-bg-inset px-2.5 py-1 text-[12px] font-semibold text-t1 hover:bg-bg-3">
-        ＋ Filter
+        className={'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-semibold hover:bg-bg-3 ' +
+          (isExclude ? 'border-bad/40 bg-bad-soft text-bad' : 'border-line bg-bg-inset text-t1')}>
+        ＋ {isExclude ? 'Exclusion' : 'Filter'}
       </button>
-      {active.length > 0 && <button onClick={clearAll} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear all</button>}
+      {active.length > 0 && <button onClick={() => clearAll(mode)} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear all</button>}
 
       {open === '__add__' && (
         <div className="absolute left-0 top-full z-50 mt-2 grid w-[320px] grid-cols-2 gap-1 rounded-[var(--radius-vela-md)] border border-line bg-bg-2 p-2 shadow-[var(--shadow-vela)]">
@@ -75,7 +99,7 @@ export function FilterBar() {
         </div>
       )}
       {open && open !== '__add__' && (
-        <ValuePicker dim={open} selected={filters[open] || []} onApply={(vals) => { setFilter(open, vals); setOpen(null) }} onClose={() => setOpen(null)} />
+        <ValuePicker dim={open} selected={current[open] || []} onApply={(vals) => { set(open, vals); setOpen(null) }} onClose={() => setOpen(null)} />
       )}
     </div>
   )

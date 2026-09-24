@@ -1,10 +1,11 @@
-import { NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/cn'
-import { useViews, viewKind } from '@/lib/views'
+import { useViews, viewKind, emptyViewConfig, nextReportName } from '@/lib/views'
 
 const NAV: [string, string, string, boolean?][] = [
   ['/', 'Overview', 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', true],
-  ['/analytics', 'Analytics', 'M3 3v18h18M7 14l3-3 3 3 5-6'],
+  ['/analytics', 'User Reports', 'M3 3v18h18M7 14l3-3 3 3 5-6'],
   ['/models', 'Model Comparison', 'M3 17l6-6 4 4 8-8M3 21h18'],
   ['/dashboard', 'Raw data', 'M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z'],
   ['/review', 'Review queue', 'M22 12h-6l-2 3h-4l-2-3H2M5 5h14l3 7v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-6z'],
@@ -17,13 +18,29 @@ const NAV: [string, string, string, boolean?][] = [
 const linkBase =
   'flex items-center gap-3 rounded-[11px] px-3 py-2.5 text-[13px] font-semibold text-t1 transition-colors hover:bg-bg-3 hover:text-t0'
 const linkActive = 'bg-acc-soft text-acc!'
+const subLink =
+  'block truncate rounded-[9px] px-2.5 py-1.5 text-[12.5px] font-medium text-t1 transition-colors hover:bg-bg-3 hover:text-t0'
+const subLinkActive = 'bg-acc-soft text-acc!'
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   // Carry the active filter query across pages so filters stay global (§5.3).
   const { search } = useLocation()
-  const { views } = useViews()
+  const { views, create } = useViews()
+  const navigate = useNavigate()
+  const [creating, setCreating] = useState(false)
+  // New report pages start completely empty — no built-in cards, no charts.
+  const newReport = async () => {
+    if (creating) return
+    setCreating(true)
+    try {
+      const v = await create(nextReportName(views), emptyViewConfig())
+      onNavigate?.()
+      navigate(`/analytics/view/${v.id}`)
+    } catch { /* surfaced by the global loading bar */ }
+    finally { setCreating(false) }
+  }
   const carried = new URLSearchParams(search)
-  for (const k of [...carried.keys()]) if (!k.startsWith('filter.')) carried.delete(k)
+  for (const k of [...carried.keys()]) if (!k.startsWith('filter.') && !k.startsWith('exclude.')) carried.delete(k)
   const filterSearch = carried.toString()
   return (
     <div className="flex h-full flex-col">
@@ -43,25 +60,49 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <p className="px-2.5 pb-1.5 pt-1 text-[10.5px] font-bold uppercase tracking-wider text-t2">Menu</p>
         {NAV.map(([to, label, d, end]) => (
           <div key={to}>
-            <NavLink to={{ pathname: to, search: filterSearch }} end={!!end} onClick={onNavigate}
-              className={({ isActive }) => cn(linkBase, isActive && linkActive)}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <path d={d} />
-              </svg>
-              <span className="flex-1">{label}</span>
-            </NavLink>
+            {to === '/analytics' ? (
+              // "User Reports" is a section header, not a page. Its first child is the
+              // default report; every saved view becomes another child page.
+              <div className="flex items-center gap-3 px-3 pb-0.5 pt-3 text-[13px] font-semibold text-t1">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <path d={d} />
+                </svg>
+                <span className="flex-1">{label}</span>
+              </div>
+            ) : (
+              <NavLink to={{ pathname: to, search: filterSearch }} end={!!end} onClick={onNavigate}
+                className={({ isActive }) => cn(linkBase, isActive && linkActive)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <path d={d} />
+                </svg>
+                <span className="flex-1">{label}</span>
+              </NavLink>
+            )}
             {(to === '/analytics' || to === '/models') && (() => {
               const kind = to === '/models' ? 'model' : 'brand'
               const mine = views.filter((v) => viewKind(v) === kind)
-              if (!mine.length) return null
+              const isReports = to === '/analytics'
+              if (!mine.length && !isReports) return null
               return (
                 <div className="mb-1 ml-[26px] mt-0.5 space-y-0.5 border-l border-line pl-2.5">
+                  {isReports && (
+                    <NavLink to={{ pathname: to, search: filterSearch }} end onClick={onNavigate}
+                      className={({ isActive }) => cn(subLink, isActive && subLinkActive)}>
+                      Main Sales Report
+                    </NavLink>
+                  )}
                   {mine.map((v) => (
                     <NavLink key={v.id} to={`${to}/view/${v.id}`} onClick={onNavigate}
-                      className={({ isActive }) => cn('block truncate rounded-[9px] px-2.5 py-1.5 text-[12.5px] font-medium text-t1 transition-colors hover:bg-bg-3 hover:text-t0', isActive && 'bg-acc-soft text-acc!')}>
+                      className={({ isActive }) => cn(subLink, isActive && subLinkActive)}>
                       {v.name}
                     </NavLink>
                   ))}
+                  {isReports && (
+                    <button type="button" onClick={newReport} disabled={creating}
+                      className={cn(subLink, 'w-full text-left text-t2 hover:text-acc disabled:opacity-60')}>
+                      ＋ Empty New Report
+                    </button>
+                  )}
                 </div>
               )
             })()}

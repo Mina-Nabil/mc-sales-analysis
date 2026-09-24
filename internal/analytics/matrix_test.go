@@ -82,3 +82,68 @@ func TestModelFilterUsesTheBrandQualifiedName(t *testing.T) {
 		t.Error("unknown filter keys must not resolve")
 	}
 }
+
+// Exclusion is the mirror of inclusion: excluding a dimension value must drop
+// exactly that value's units and leave the rest of the total untouched. The
+// "!"-prefixed key reuses the dimension expression, so this also guards against
+// the include/exclude rows ever comparing against different SQL.
+func TestExcludeFilterRemovesExactlyThatValue(t *testing.T) {
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		url = "postgres://mc:mc@localhost:5433/mcsales?sslmode=disable"
+	}
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, url)
+	if err != nil || pool.Ping(ctx) != nil {
+		t.Skip("no database reachable — skipping integration test")
+	}
+	defer pool.Close()
+
+	for _, dim := range AvailableDimensions() {
+		t.Run(dim, func(t *testing.T) {
+			all, err := Aggregate(ctx, pool, dim, nil, 0)
+			if err != nil {
+				t.Fatalf("Aggregate(%s): %v", dim, err)
+			}
+			if len(all) == 0 || all[0].Volume == 0 {
+				t.Skipf("no data for dimension %q", dim)
+			}
+			// Totals come from Timeseries, not the Aggregate buckets: Aggregate
+			// caps at 200 rows, so summing its buckets under-counts long tails.
+			total, err := seriesTotal(ctx, pool, nil)
+			if err != nil {
+				t.Fatalf("Timeseries: %v", err)
+			}
+			top := all[0]
+			rest, err := Aggregate(ctx, pool, dim, map[string][]string{"!" + dim: {top.Key}}, 0)
+			if err != nil {
+				t.Fatalf("Aggregate(%s, exclude %q): %v", dim, top.Key, err)
+			}
+			for _, b := range rest {
+				if b.Key == top.Key {
+					t.Fatalf("excluding %s=%q still returned that bucket", dim, top.Key)
+				}
+			}
+			got, err := seriesTotal(ctx, pool, map[string][]string{"!" + dim: {top.Key}})
+			if err != nil {
+				t.Fatalf("Timeseries(exclude %q): %v", top.Key, err)
+			}
+			if want := total - top.Volume; got != want {
+				t.Errorf("excluding %s=%q left %d units, want %d", dim, top.Key, got, want)
+			}
+		})
+	}
+}
+
+// seriesTotal sums every period's volume under a filter map — the uncapped total.
+func seriesTotal(ctx context.Context, pool *pgxpool.Pool, f map[string][]string) (int64, error) {
+	pts, err := Timeseries(ctx, pool, f, 0)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	for _, p := range pts {
+		n += p.Volume
+	}
+	return n, nil
+}

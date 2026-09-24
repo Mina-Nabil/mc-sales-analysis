@@ -34,7 +34,7 @@ export default function Overview() {
           <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Overview</h1>
           <p className="mt-1 text-[13px] text-t1">Egypt new-car registrations · cars only</p>
         </div>
-        <Link to="/analytics"><Button variant="secondary">View analytics →</Button></Link>
+        <Link to="/analytics"><Button variant="secondary">Main Sales Report →</Button></Link>
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
