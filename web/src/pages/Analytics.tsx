@@ -352,8 +352,16 @@ export default function Analytics() {
       )}
 
       {pies.length === 0 && bars.length === 0 && tables.length === 0 && crosses.length === 0 && !builtins && (
-        <Card><div className="grid h-32 place-items-center text-center text-[13px] text-t2">
-          No charts. Use <span className="mx-1 font-semibold text-t1">＋ Add table</span>, <span className="mx-1 font-semibold text-t1">＋ Add 2-dimension table</span>, <span className="mx-1 font-semibold text-t1">＋ Add bar chart</span>, or <span className="mx-1 font-semibold text-t1">＋ Add pie chart</span> to add a breakdown.
+        <Card><div className="flex min-h-[160px] flex-col items-center justify-center gap-3 px-6 py-8 text-center">
+          <p className="text-[13.5px] font-semibold text-t1">This report is empty.</p>
+          {/* The option names are chips, not inline words: as buttons were added
+              they wrapped one-per-line and left stray commas mid-sentence. */}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {['＋ Add table', '＋ Add 2-dimension table', '＋ Add bar chart', '＋ Add pie chart'].map((t) => (
+              <span key={t} className="rounded-full border border-line bg-bg-inset px-2.5 py-1 text-[12px] font-semibold text-t1">{t}</span>
+            ))}
+          </div>
+          <p className="text-[12.5px] text-t2">Pick one above to add a breakdown.</p>
         </div></Card>
       )}
 

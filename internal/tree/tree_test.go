@@ -47,7 +47,7 @@ func TestCreateModelInsertsSuccessfully(t *testing.T) {
 	}
 
 	// with an optional segment omitted (the common review-queue case)
-	id, name, err := CreateModel(ctx, pool, brandID, "tiggo 8 pro", "Passenger", nil, 0)
+	id, name, err := CreateModel(ctx, pool, brandID, "tiggo 8 pro", "Passenger", "HYBRID", "CKD", nil, 0)
 	if err != nil {
 		t.Fatalf("CreateModel: %v", err)
 	}
@@ -59,17 +59,23 @@ func TestCreateModelInsertsSuccessfully(t *testing.T) {
 	}
 
 	// and the ≤4-letter ALL CAPS rule still applies
-	if _, n2, err := CreateModel(ctx, pool, brandID, "mg5", "Passenger", nil, 0); err != nil {
+	if _, n2, err := CreateModel(ctx, pool, brandID, "mg5", "Passenger", "", "", nil, 0); err != nil {
 		t.Fatalf("CreateModel short name: %v", err)
 	} else if n2 != "MG5" {
 		t.Errorf("expected MG5, got %q", n2)
 	}
 
-	var carType string
-	if err := pool.QueryRow(ctx, `SELECT COALESCE(car_type,'') FROM models WHERE id=$1`, id).Scan(&carType); err != nil {
+	// car_type plus the two model-level specs the monthly feed never carries.
+	var carType, engine, supply string
+	if err := pool.QueryRow(ctx, `
+		SELECT COALESCE(car_type,''), COALESCE(engine_type,''), COALESCE(supply,'')
+		  FROM models WHERE id=$1`, id).Scan(&carType, &engine, &supply); err != nil {
 		t.Fatal(err)
 	}
 	if carType != "Passenger" {
 		t.Errorf("car_type not stored: %q", carType)
+	}
+	if engine != "HYBRID" || supply != "CKD" {
+		t.Errorf("engine/supply not stored: %q / %q", engine, supply)
 	}
 }

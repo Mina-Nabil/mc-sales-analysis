@@ -3,6 +3,8 @@ import { api, fmt } from '@/lib/api'
 import { Card, Button, Badge, Modal } from '@/components/ui'
 
 const CAR_TYPES = ['Passenger', 'Commercial', 'Bus', 'Construction']
+const ENGINES = ['ICE', 'HYBRID', 'BEV', 'REEV', 'Other']
+const SUPPLIES = ['CKD', 'SUP']
 const ORIGINS = ['China', 'Europe', 'Japan', 'Korea', 'USA', 'India', 'Russia', 'UAE', 'Egypt', 'Others']
 const field = 'h-9 w-full rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-3 text-[13px] text-t0 focus:border-acc'
 
@@ -258,15 +260,20 @@ function NewModelModal({ item, segments, onClose, onSubmit }: any) {
   const [name, setName] = useState('')
   const [carType, setCarType] = useState('Passenger')
   const [segmentId, setSegmentId] = useState('')
-  useEffect(() => { if (item) { setName(item.raw_model || ''); setCarType('Passenger'); setSegmentId('') } }, [item])
+  const [engine, setEngine] = useState('')
+  const [supply, setSupply] = useState('')
+  useEffect(() => { if (item) { setName(item.raw_model || ''); setCarType('Passenger'); setSegmentId(''); setEngine(''); setSupply('') } }, [item])
   if (!item) return null
   return (
     <Modal open={!!item} onClose={onClose} title={`New model under ${item.brand}`}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name} onClick={() => onSubmit({ name, car_type: carType, segment_id: segmentId ? Number(segmentId) : null })}>Create &amp; confirm</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name} onClick={() => onSubmit({ name, car_type: carType, engine_type: engine, supply, segment_id: segmentId ? Number(segmentId) : null })}>Create &amp; confirm</Button></>}>
       <p className="mb-3 text-[12.5px] text-t1">Raw string: <span dir="rtl" className="font-semibold text-t0">{item.raw_model || '(blank)'}</span> · {fmt(item.volume)} units</p>
       <Field label="Model name"><input className={field} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
       <Field label="Car type"><select className={field} value={carType} onChange={(e) => setCarType(e.target.value)}>{CAR_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
       <Field label="Segment"><select className={field} value={segmentId} onChange={(e) => setSegmentId(e.target.value)}><option value="">—</option>{segments.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+      <Field label="Engine"><select className={field} value={engine} onChange={(e) => setEngine(e.target.value)}><option value="">—</option>{ENGINES.map((t) => <option key={t}>{t}</option>)}</select></Field>
+      <Field label="Supply"><select className={field} value={supply} onChange={(e) => setSupply(e.target.value)}><option value="">—</option>{SUPPLIES.map((t) => <option key={t}>{t}</option>)}</select></Field>
+      <p className="mt-1 text-[11px] text-t2">Engine and supply are model-level specs — the monthly feed carries neither, so they apply to every month of this model's facts.</p>
     </Modal>
   )
 }

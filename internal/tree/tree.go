@@ -76,16 +76,20 @@ func CreateBrand(ctx context.Context, pool *pgxpool.Pool, name, origin string, p
 }
 
 // CreateModel adds a new model under a brand. Returns its id.
-func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, carType string, segmentID *int64, actorID int64) (int64, string, error) {
+// engineType/supply are the model-level specs the live monthly feed does not
+// carry (CLAUDE.md §"design rules"); both are optional. RefreshModelDefaults
+// only fills a model that HAS engine/supply-bearing facts, so a value set here
+// survives every later fact load.
+func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, carType, engineType, supply string, segmentID *int64, actorID int64) (int64, string, error) {
 	name = applyCasing(name)
 	if name == "" {
 		return 0, "", fmt.Errorf("model name required")
 	}
 	var id int64
 	err := pool.QueryRow(ctx, `
-		INSERT INTO models (brand_id, name, car_type, segment_id, status)
-		VALUES ($1,$2,$3,$4,'confirmed') RETURNING id`,
-		brandID, name, nullIf(carType), segmentID).Scan(&id)
+		INSERT INTO models (brand_id, name, car_type, segment_id, engine_type, supply, status)
+		VALUES ($1,$2,$3,$4,$5,$6,'confirmed') RETURNING id`,
+		brandID, name, nullIf(carType), segmentID, nullIf(engineType), nullIf(supply)).Scan(&id)
 	if err != nil {
 		return 0, "", fmt.Errorf("create model: %w", err)
 	}
@@ -284,7 +288,7 @@ func ResolveBrand(ctx context.Context, pool *pgxpool.Pool, rawBrand string, bran
 
 // CreateModelForReview creates a model and confirms a review alias to it,
 // re-deriving that alias's facts. Closes a "new model" review item in one step.
-func CreateModelForReview(ctx context.Context, pool *pgxpool.Pool, aliasID int64, name, carType string, segmentID *int64, actorID int64) (int64, int, error) {
+func CreateModelForReview(ctx context.Context, pool *pgxpool.Pool, aliasID int64, name, carType, engineType, supply string, segmentID *int64, actorID int64) (int64, int, error) {
 	var brandID int64
 	var raw, status string
 	if err := pool.QueryRow(ctx,
@@ -294,7 +298,7 @@ func CreateModelForReview(ctx context.Context, pool *pgxpool.Pool, aliasID int64
 	if status != "needs_review" {
 		return 0, 0, fmt.Errorf("item was already %s — refresh the queue", status)
 	}
-	modelID, _, err := CreateModel(ctx, pool, brandID, name, carType, segmentID, actorID)
+	modelID, _, err := CreateModel(ctx, pool, brandID, name, carType, engineType, supply, segmentID, actorID)
 	if err != nil {
 		return 0, 0, err
 	}

@@ -153,14 +153,18 @@ function NewBrandModal({ open, brands, onClose, onSubmit }: any) {
 
 function NewModelModal({ open, brand, segments, onClose, onSubmit }: any) {
   const [name, setName] = useState(''); const [carType, setCarType] = useState('Passenger'); const [seg, setSeg] = useState('')
-  useEffect(() => { if (open) { setName(''); setCarType('Passenger'); setSeg('') } }, [open])
+  const [engine, setEngine] = useState(''); const [supply, setSupply] = useState('')
+  useEffect(() => { if (open) { setName(''); setCarType('Passenger'); setSeg(''); setEngine(''); setSupply('') } }, [open])
   if (!brand) return null
   return (
     <Modal open={open} onClose={onClose} title={`New model under ${brand.name}`}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name} onClick={() => onSubmit({ name, car_type: carType, segment_id: seg ? Number(seg) : null })}>Create</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={!name} onClick={() => onSubmit({ name, car_type: carType, engine_type: engine, supply, segment_id: seg ? Number(seg) : null })}>Create</Button></>}>
       <F label="Name"><input className={field} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></F>
       <F label="Car type"><select className={field} value={carType} onChange={(e) => setCarType(e.target.value)}>{CAR_TYPES.map((t) => <option key={t}>{t}</option>)}</select></F>
       <F label="Segment"><select className={field} value={seg} onChange={(e) => setSeg(e.target.value)}><option value="">—</option>{segments.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></F>
+      <F label="Engine"><select className={field} value={engine} onChange={(e) => setEngine(e.target.value)}><option value="">—</option>{ENGINES.map((t) => <option key={t}>{t}</option>)}</select></F>
+      <F label="Supply"><select className={field} value={supply} onChange={(e) => setSupply(e.target.value)}><option value="">—</option>{SUPPLIES.map((t) => <option key={t}>{t}</option>)}</select></F>
+      <p className="text-[11px] text-t2">Engine and supply are model-level specs — the monthly feed carries neither, so they apply to every month of this model's facts.</p>
     </Modal>
   )
 }

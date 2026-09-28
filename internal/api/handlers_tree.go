@@ -26,16 +26,18 @@ func (s *Server) createBrand(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		BrandID   int64  `json:"brand_id"`
-		Name      string `json:"name"`
-		CarType   string `json:"car_type"`
-		SegmentID *int64 `json:"segment_id"`
+		BrandID    int64  `json:"brand_id"`
+		Name       string `json:"name"`
+		CarType    string `json:"car_type"`
+		EngineType string `json:"engine_type"`
+		Supply     string `json:"supply"`
+		SegmentID  *int64 `json:"segment_id"`
 	}
 	if err := readJSON(r, &req); err != nil || req.BrandID == 0 || req.Name == "" {
 		httpErr(w, http.StatusBadRequest, "brand_id and name required")
 		return
 	}
-	id, name, err := tree.CreateModel(r.Context(), s.pool, req.BrandID, req.Name, req.CarType, req.SegmentID, s.user(r).ID)
+	id, name, err := tree.CreateModel(r.Context(), s.pool, req.BrandID, req.Name, req.CarType, req.EngineType, req.Supply, req.SegmentID, s.user(r).ID)
 	if err != nil {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
@@ -241,15 +243,17 @@ func (s *Server) reviewNewModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Name      string `json:"name"`
-		CarType   string `json:"car_type"`
-		SegmentID *int64 `json:"segment_id"`
+		Name       string `json:"name"`
+		CarType    string `json:"car_type"`
+		EngineType string `json:"engine_type"`
+		Supply     string `json:"supply"`
+		SegmentID  *int64 `json:"segment_id"`
 	}
 	if err := readJSON(r, &req); err != nil || req.Name == "" {
 		httpErr(w, http.StatusBadRequest, "name required")
 		return
 	}
-	modelID, units, err := tree.CreateModelForReview(r.Context(), s.pool, id, req.Name, req.CarType, req.SegmentID, s.user(r).ID)
+	modelID, units, err := tree.CreateModelForReview(r.Context(), s.pool, id, req.Name, req.CarType, req.EngineType, req.Supply, req.SegmentID, s.user(r).ID)
 	if err != nil {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
