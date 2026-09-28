@@ -112,6 +112,21 @@ func (s *Server) analyticsAgg(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, buckets)
 }
 
+// analyticsCross returns the two-dimension pivot (rows = dimension1 values,
+// columns = dimension2 values) used by the report pages' 2-dimension table.
+func (s *Server) analyticsCross(w http.ResponseWriter, r *http.Request) {
+	p := parseMatrixParams(r)
+	q := r.URL.Query()
+	res, err := analytics.Cross(r.Context(), s.pool,
+		or(q.Get("dimension1"), "brand"), or(q.Get("dimension2"), "region"),
+		p.Filters, atoiOr(q.Get("year"), 0), atoiOr(q.Get("row_limit"), 0), atoiOr(q.Get("col_limit"), 0))
+	if err != nil {
+		httpErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 // analyticsTimeseries returns per-month totals for the filtered set (all periods,
 // or a single year when ?year is given).
 func (s *Server) analyticsTimeseries(w http.ResponseWriter, r *http.Request) {

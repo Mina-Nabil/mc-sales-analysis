@@ -23,6 +23,14 @@ const DIM_GROUPS: [string, string[]][] = [
 const PIES_KEY = 'mc.analytics.pies'
 const BARS_KEY = 'mc.analytics.bars'
 const TABLES_KEY = 'mc.analytics.tables'
+const CROSSES_KEY = 'mc.analytics.crosses'
+// A 2-dimension table is stored as "rowDim|colDim" — one string, so it rides
+// the same add/remove/persist path as every other card.
+const CROSS_SEP = '|'
+const splitCross = (c: string): [string, string] => {
+  const [a, b] = c.split(CROSS_SEP)
+  return [a || 'brand', b || 'region']
+}
 const loadSaved = (key: string, fallback: string[]): string[] => {
   try {
     const raw = localStorage.getItem(key)
@@ -49,6 +57,7 @@ export default function Analytics() {
   const [pies, setPies] = useState<string[]>(() => loadSaved(PIES_KEY, ['segment']))
   const [bars, setBars] = useState<string[]>(() => loadSaved(BARS_KEY, []))
   const [tables, setTables] = useState<string[]>(() => loadSaved(TABLES_KEY, []))
+  const [crosses, setCrosses] = useState<string[]>(() => loadSaved(CROSSES_KEY, []))
   // Built-in cards (monthly volume, top brands, leaderboard). An "Empty New
   // Report" starts with them off; every other view keeps them.
   const [builtins, setBuiltins] = useState(true)
@@ -97,14 +106,25 @@ export default function Analytics() {
   const removeBar = (dim: string) => setBars((b) => b.filter((d) => d !== dim))
   const addTable = (dim: string) => setTables((t) => (t.includes(dim) ? t : [...t, dim]))
   const removeTable = (dim: string) => setTables((t) => t.filter((d) => d !== dim))
+  const addCross = () => setCrosses((c) => [...c, `brand${CROSS_SEP}region`])
+  const removeCross = (i: number) => setCrosses((c) => c.filter((_, n) => n !== i))
+  // Both axes are editable in place, so a table can be re-pointed without
+  // removing it — the same dynamic feel as Model Comparison's measure picker.
+  const setCrossDim = (i: number, axis: 0 | 1, dim: string) =>
+    setCrosses((c) => c.map((v, n) => {
+      if (n !== i) return v
+      const pair = splitCross(v)
+      pair[axis] = dim
+      return pair.join(CROSS_SEP)
+    }))
 
   // ── saved-view sync ─────────────────────────────────────────────────────────
   const sanitize = (f: Record<string, string[]>) =>
     Object.fromEntries(Object.entries(f).filter(([, v]) => Array.isArray(v) && v.length))
   const flat = (f: Record<string, string[]>) =>
     Object.keys(f).sort().map((k) => k + '=' + [...f[k]].sort().join(',')).join('&')
-  const keyOf = (b: string[], p: string[], t: string[], f: Record<string, string[]>, y: string, bi = true, x: Record<string, string[]> = {}) =>
-    JSON.stringify({ b, p, t, f: flat(f), y, bi, x: flat(x) })
+  const keyOf = (b: string[], p: string[], t: string[], f: Record<string, string[]>, y: string, bi = true, x: Record<string, string[]> = {}, c: string[] = []) =>
+    JSON.stringify({ b, p, t, f: flat(f), y, bi, x: flat(x), c })
   const applyToUrl = (f: Record<string, string[]>, y: string, x: Record<string, string[]> = {}) => {
     const n = new URLSearchParams()
     for (const d in f) if (f[d]?.length) n.set(PREFIX.include + d, f[d].join(','))
@@ -118,6 +138,7 @@ export default function Analytics() {
     if (viewId == null) {
       hydratedRef.current = null; settledRef.current = true; targetRef.current = null; setSettled(true)
       setBars(loadSaved(BARS_KEY, [])); setPies(loadSaved(PIES_KEY, ['segment'])); setTables(loadSaved(TABLES_KEY, []))
+      setCrosses(loadSaved(CROSSES_KEY, []))
       setBuiltins(true)
       return
     }
@@ -130,8 +151,9 @@ export default function Analytics() {
     const x = sanitize(cfg.excludes && typeof cfg.excludes === 'object' ? cfg.excludes : {})
     const y = typeof cfg.year === 'string' ? cfg.year : 'all'
     const bi = cfg.builtins !== false
-    setBars(b); setPies(p); setTables(t); setBuiltins(bi); setName(view.name)
-    lastSavedRef.current = keyOf(b, p, t, f, y, bi, x)
+    const c = Array.isArray(cfg.crosses) ? cfg.crosses : []
+    setBars(b); setPies(p); setTables(t); setCrosses(c); setBuiltins(bi); setName(view.name)
+    lastSavedRef.current = keyOf(b, p, t, f, y, bi, x, c)
     hydratedRef.current = viewId
     targetRef.current = { f, y, x }
     settledRef.current = false // keep forcing the URL to this view until it sticks
@@ -154,7 +176,7 @@ export default function Analytics() {
   // Nothing saves on its own: changes are staged until Save changes / Save as new.
   const nameEdited = viewId != null && !!view && name.trim() !== '' && name !== view.name
   const cfgDirty = viewId != null && settled &&
-    keyOf(bars, pies, tables, sanitize(filters), year, builtins, sanitize(excludes)) !== lastSavedRef.current
+    keyOf(bars, pies, tables, sanitize(filters), year, builtins, sanitize(excludes), crosses) !== lastSavedRef.current
   const dirty = cfgDirty || nameEdited
   useEffect(() => { if (dirty) setSaveStatus('idle') }, [dirty])
 
@@ -162,10 +184,10 @@ export default function Analytics() {
     if (viewId == null || !view) return
     const f = sanitize(filters)
     const x = sanitize(excludes)
-    const k = keyOf(bars, pies, tables, f, year, builtins, x)
+    const k = keyOf(bars, pies, tables, f, year, builtins, x, crosses)
     setSaveStatus('saving')
     try {
-      await saveConfig(viewId, { bars, pies, tables, filters: f, excludes: x, year, builtins })
+      await saveConfig(viewId, { bars, pies, tables, crosses, filters: f, excludes: x, year, builtins })
       if (nameEdited) await rename(viewId, name.trim())
       lastSavedRef.current = k
       setSaveStatus('saved')
@@ -178,11 +200,12 @@ export default function Analytics() {
     localStorage.setItem(BARS_KEY, JSON.stringify(bars))
     localStorage.setItem(PIES_KEY, JSON.stringify(pies))
     localStorage.setItem(TABLES_KEY, JSON.stringify(tables))
-  }, [viewId, bars, pies, tables])
+    localStorage.setItem(CROSSES_KEY, JSON.stringify(crosses))
+  }, [viewId, bars, pies, tables, crosses])
 
   const saveAsNew = async () => {
     const nm = newName.trim(); if (!nm) return
-    const cfg: ViewConfig = { bars, pies, tables, filters: sanitize(filters), excludes: sanitize(excludes), year, builtins }
+    const cfg: ViewConfig = { bars, pies, tables, crosses, filters: sanitize(filters), excludes: sanitize(excludes), year, builtins }
     try { const v = await create(nm, cfg); setNameModal(false); setNewName(''); navigate(`/analytics/view/${v.id}`) }
     catch { /* surfaced by the global loading bar */ }
   }
@@ -241,6 +264,7 @@ export default function Analytics() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AddMenu label="＋ Add table" used={tables} onPick={addTable} />
+          <Button variant="secondary" size="sm" onClick={addCross}>＋ Add 2-dimension table</Button>
           <AddMenu label="＋ Add bar chart" used={bars} onPick={addBar} />
           <AddMenu label="＋ Add pie chart" used={pies} onPick={addPie} />
           {viewId != null ? (
@@ -314,9 +338,22 @@ export default function Analytics() {
         </div>
       )}
 
-      {pies.length === 0 && bars.length === 0 && tables.length === 0 && !builtins && (
+      {/* 5 — two-dimension pivots */}
+      {crosses.length > 0 && (
+        <div className="space-y-4">
+          {crosses.map((c, i) => {
+            const [d1, d2] = splitCross(c)
+            return (
+              <CrossCard key={`${c}-${i}`} dim1={d1} dim2={d2} yearLabel={label} qs={qs} ready={ready}
+                onPick={(axis, dim) => setCrossDim(i, axis, dim)} onRemove={() => removeCross(i)} />
+            )
+          })}
+        </div>
+      )}
+
+      {pies.length === 0 && bars.length === 0 && tables.length === 0 && crosses.length === 0 && !builtins && (
         <Card><div className="grid h-32 place-items-center text-center text-[13px] text-t2">
-          No charts. Use <span className="mx-1 font-semibold text-t1">＋ Add table</span>, <span className="mx-1 font-semibold text-t1">＋ Add bar chart</span>, or <span className="mx-1 font-semibold text-t1">＋ Add pie chart</span> to add a breakdown.
+          No charts. Use <span className="mx-1 font-semibold text-t1">＋ Add table</span>, <span className="mx-1 font-semibold text-t1">＋ Add 2-dimension table</span>, <span className="mx-1 font-semibold text-t1">＋ Add bar chart</span>, or <span className="mx-1 font-semibold text-t1">＋ Add pie chart</span> to add a breakdown.
         </div></Card>
       )}
 
@@ -557,6 +594,88 @@ function TableCard({ dimension, label, year, yearNote, filterQs, ready, onRemove
                   <td key={mi} className="px-3 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(v)}</td>
                 ))}
                 <td className="px-4 py-2.5 text-right font-extrabold tabular-nums text-t0">{fmt(grand)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      ) : <Empty />}
+    </Card>
+  )
+}
+
+// CrossCard — the 2-dimension pivot: rows are dimension 1, columns dimension 2.
+// Both axes are pickers, so the table can be re-pointed in place. Values beyond
+// each axis's cut are folded into "Others" server-side, so the grand total still
+// equals the filtered period total.
+function CrossCard({ dim1, dim2, yearLabel, qs, ready, onPick, onRemove }: {
+  dim1: string; dim2: string; yearLabel: string; qs: string; ready: boolean
+  onPick: (axis: 0 | 1, dim: string) => void; onRemove: () => void
+}) {
+  const [res, setRes] = useState<any>(null)
+  useEffect(() => {
+    if (!ready) return
+    setRes(null)
+    const p = new URLSearchParams(qs)
+    p.set('dimension1', dim1); p.set('dimension2', dim2)
+    api.cross(p.toString()).then(setRes).catch(() => setRes({ rows: [], cols: [] }))
+  }, [dim1, dim2, qs, ready])
+
+  const cols: string[] = res?.cols || []
+  const rows: any[] = res?.rows || []
+  const stickyHead = 'sticky left-0 z-20 bg-bg-2 px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-wide text-t2'
+  const stickyCell = 'sticky left-0 z-10 bg-bg-2 px-4 py-2.5 font-semibold text-t0'
+  const pick = (axis: 0 | 1, value: string) => (
+    <select className={selCls} value={value} onChange={(e) => onPick(axis, e.target.value)}>
+      {DIM_GROUPS.map(([group, dims]) => (
+        <optgroup key={group} label={group}>
+          {dims.map((k) => <option key={k} value={k}>{labelOf(k)}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  )
+
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>{labelOf(dim1)} × {labelOf(dim2)}</CardTitle>
+          {pick(0, dim1)}<span className="text-[13px] font-bold text-t2">×</span>{pick(1, dim2)}
+        </div>
+        <div className="flex items-center gap-2">
+          <CardSubtitle>Units · {yearLabel}</CardSubtitle>
+          <RemoveBtn label={`${labelOf(dim1)} × ${labelOf(dim2)}`} onClick={onRemove} />
+        </div>
+      </div>
+      {res === null ? <Loading /> : rows.length ? (
+        <div className="max-h-[560px] overflow-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line">
+                <th className={stickyHead + ' top-0 z-30'}>{labelOf(dim1)}</th>
+                {cols.map((c) => (
+                  <th key={c} dir="auto" className="sticky top-0 bg-bg-2 px-3 py-3 text-right text-[10.5px] font-bold uppercase tracking-wide text-t2">{c}</th>
+                ))}
+                <th className="sticky top-0 bg-bg-2 px-4 py-3 text-right text-[10.5px] font-bold uppercase tracking-wide text-t2">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r: any) => (
+                <tr key={r.key} className="border-b border-line last:border-0 hover:bg-bg-3">
+                  <td className={stickyCell} dir="auto">{r.key}</td>
+                  {r.cells.map((v: number, i: number) => (
+                    <td key={i} className="px-3 py-2.5 text-right tabular-nums text-t1">{v ? fmt(v) : <span className="text-t2">–</span>}</td>
+                  ))}
+                  <td className="px-4 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(r.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-line bg-bg-inset">
+                <td className={stickyCell.replace('bg-bg-2', 'bg-bg-inset') + ' font-bold'}>Total</td>
+                {(res.col_totals || []).map((v: number, i: number) => (
+                  <td key={i} className="px-3 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(v)}</td>
+                ))}
+                <td className="px-4 py-2.5 text-right font-extrabold tabular-nums text-t0">{fmt(res.grand || 0)}</td>
               </tr>
             </tfoot>
           </table>

@@ -7,6 +7,8 @@ export type ViewConfig = {
   bars: string[]
   pies: string[]
   tables: string[]
+  /** 2-dimension pivot tables, each stored as "rowDim|colDim". */
+  crosses?: string[]
   filters: Record<string, string[]>
   /** Values to leave out of every card — the red "Exclude data from:" row. */
   excludes?: Record<string, string[]>
@@ -18,7 +20,7 @@ export type ViewConfig = {
 
 /** A report page with no cards at all — the "Empty New Report" starting point. */
 export const emptyViewConfig = (): ViewConfig => ({
-  kind: 'brand', bars: [], pies: [], tables: [], filters: {}, excludes: {}, year: 'all', builtins: false,
+  kind: 'brand', bars: [], pies: [], tables: [], crosses: [], filters: {}, excludes: {}, year: 'all', builtins: false,
 })
 
 /** "New Report", then "New Report 2", … so the sidebar never shows two alike. */

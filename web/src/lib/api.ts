@@ -57,6 +57,7 @@ export const api = {
   exportHref: (qs: string) => '/api/v1/analytics/export.xlsx?' + qs,
   values: (dimension: string, qs = '') => req('GET', `/analytics/values?dimension=${dimension}${qs ? '&' + qs : ''}`),
   agg: (dimension: string, qs = '') => req('GET', `/analytics/agg?dimension=${dimension}${qs ? '&' + qs : ''}`),
+  cross: (qs: string) => req('GET', '/analytics/cross?' + qs),
   timeseries: (qs = '') => req('GET', '/analytics/timeseries' + (qs ? '?' + qs : '')),
 
   review: (limit = 100) => req('GET', `/review?limit=${limit}`),

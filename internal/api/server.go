@@ -132,6 +132,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/analytics/years", s.auth(s.analyticsYears))
 	mux.HandleFunc("GET /api/v1/analytics/values", s.auth(s.analyticsValues))
 	mux.HandleFunc("GET /api/v1/analytics/agg", s.auth(s.analyticsAgg))
+	mux.HandleFunc("GET /api/v1/analytics/cross", s.auth(s.analyticsCross))
 	mux.HandleFunc("GET /api/v1/analytics/timeseries", s.auth(s.analyticsTimeseries))
 	mux.HandleFunc("GET /api/v1/analytics/export.xlsx", s.auth(s.analyticsExport))
 	mux.HandleFunc("GET /api/v1/stats", s.auth(s.stats))
