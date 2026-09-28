@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 
+/** One 2-dimension table: rows are (dim1, dim2) pairs across the months.
+ *  `values2` pins which dimension-2 values get a row; empty = top 4 + Others. */
+export type CrossSpec = { dim1: string; dim2: string; values2?: string[] }
+
 // Analytics view: a set of dynamic charts + the filter/year context.
 export type ViewConfig = {
   kind?: 'brand'
   bars: string[]
   pies: string[]
   tables: string[]
-  /** 2-dimension pivot tables, each stored as "rowDim|colDim". */
-  crosses?: string[]
+  /** 2-dimension monthly tables: dimension 1 grouped, dimension 2 nested. */
+  crosses?: CrossSpec[]
   filters: Record<string, string[]>
   /** Values to leave out of every card — the red "Exclude data from:" row. */
   excludes?: Record<string, string[]>

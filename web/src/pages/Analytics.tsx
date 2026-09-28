@@ -3,8 +3,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmt } from '@/lib/api'
 import { Card, CardHeader, CardTitle, CardSubtitle, Badge, Button, Modal, Input } from '@/components/ui'
 import { AreaLineChart, BarChart, DonutChart, StackedBarChart } from '@/components/charts'
-import { FilterBar, useFilters, FILTER_DIMS, PREFIX } from '@/components/FilterBar'
-import { useViews, viewKind, type ViewConfig } from '@/lib/views'
+import { FilterBar, ValuePicker, useFilters, FILTER_DIMS, PREFIX } from '@/components/FilterBar'
+import { useViews, viewKind, type ViewConfig, type CrossSpec } from '@/lib/views'
 
 const MONTHS = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const PALETTE = ['var(--acc)', 'var(--info)', 'var(--ok)', 'var(--warn)', 'var(--bad)', 'var(--acc-2)', '#c084fc', '#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#38bdf8', '#818cf8']
@@ -24,12 +24,21 @@ const PIES_KEY = 'mc.analytics.pies'
 const BARS_KEY = 'mc.analytics.bars'
 const TABLES_KEY = 'mc.analytics.tables'
 const CROSSES_KEY = 'mc.analytics.crosses'
-// A 2-dimension table is stored as "rowDim|colDim" — one string, so it rides
-// the same add/remove/persist path as every other card.
-const CROSS_SEP = '|'
-const splitCross = (c: string): [string, string] => {
-  const [a, b] = c.split(CROSS_SEP)
-  return [a || 'brand', b || 'region']
+const DEFAULT_CROSS: CrossSpec = { dim1: 'model', dim2: 'model_year' }
+// Tolerates the "dim1|dim2" strings the first cut of this card saved.
+const asCross = (c: any): CrossSpec => {
+  if (typeof c === 'string') {
+    const [a, b] = c.split('|')
+    return { dim1: a || DEFAULT_CROSS.dim1, dim2: b || DEFAULT_CROSS.dim2 }
+  }
+  return { dim1: c?.dim1 || DEFAULT_CROSS.dim1, dim2: c?.dim2 || DEFAULT_CROSS.dim2, values2: Array.isArray(c?.values2) ? c.values2 : undefined }
+}
+const loadCrosses = (): CrossSpec[] => {
+  try {
+    const raw = localStorage.getItem(CROSSES_KEY)
+    if (raw) { const p = JSON.parse(raw); if (Array.isArray(p)) return p.map(asCross) }
+  } catch { /* ignore malformed */ }
+  return []
 }
 const loadSaved = (key: string, fallback: string[]): string[] => {
   try {
@@ -57,7 +66,7 @@ export default function Analytics() {
   const [pies, setPies] = useState<string[]>(() => loadSaved(PIES_KEY, ['segment']))
   const [bars, setBars] = useState<string[]>(() => loadSaved(BARS_KEY, []))
   const [tables, setTables] = useState<string[]>(() => loadSaved(TABLES_KEY, []))
-  const [crosses, setCrosses] = useState<string[]>(() => loadSaved(CROSSES_KEY, []))
+  const [crosses, setCrosses] = useState<CrossSpec[]>(() => loadCrosses())
   // Built-in cards (monthly volume, top brands, leaderboard). An "Empty New
   // Report" starts with them off; every other view keeps them.
   const [builtins, setBuiltins] = useState(true)
@@ -106,24 +115,20 @@ export default function Analytics() {
   const removeBar = (dim: string) => setBars((b) => b.filter((d) => d !== dim))
   const addTable = (dim: string) => setTables((t) => (t.includes(dim) ? t : [...t, dim]))
   const removeTable = (dim: string) => setTables((t) => t.filter((d) => d !== dim))
-  const addCross = () => setCrosses((c) => [...c, `brand${CROSS_SEP}region`])
+  const addCross = () => setCrosses((c) => [...c, { ...DEFAULT_CROSS }])
   const removeCross = (i: number) => setCrosses((c) => c.filter((_, n) => n !== i))
-  // Both axes are editable in place, so a table can be re-pointed without
+  // Every part is editable in place, so a table can be re-pointed without
   // removing it — the same dynamic feel as Model Comparison's measure picker.
-  const setCrossDim = (i: number, axis: 0 | 1, dim: string) =>
-    setCrosses((c) => c.map((v, n) => {
-      if (n !== i) return v
-      const pair = splitCross(v)
-      pair[axis] = dim
-      return pair.join(CROSS_SEP)
-    }))
+  // Changing dimension 2 drops its pinned values, which belonged to the old one.
+  const patchCross = (i: number, patch: Partial<CrossSpec>) =>
+    setCrosses((c) => c.map((v, n) => (n === i ? { ...v, ...patch, ...(patch.dim2 && patch.dim2 !== v.dim2 ? { values2: undefined } : {}) } : v)))
 
   // ── saved-view sync ─────────────────────────────────────────────────────────
   const sanitize = (f: Record<string, string[]>) =>
     Object.fromEntries(Object.entries(f).filter(([, v]) => Array.isArray(v) && v.length))
   const flat = (f: Record<string, string[]>) =>
     Object.keys(f).sort().map((k) => k + '=' + [...f[k]].sort().join(',')).join('&')
-  const keyOf = (b: string[], p: string[], t: string[], f: Record<string, string[]>, y: string, bi = true, x: Record<string, string[]> = {}, c: string[] = []) =>
+  const keyOf = (b: string[], p: string[], t: string[], f: Record<string, string[]>, y: string, bi = true, x: Record<string, string[]> = {}, c: CrossSpec[] = []) =>
     JSON.stringify({ b, p, t, f: flat(f), y, bi, x: flat(x), c })
   const applyToUrl = (f: Record<string, string[]>, y: string, x: Record<string, string[]> = {}) => {
     const n = new URLSearchParams()
@@ -138,7 +143,7 @@ export default function Analytics() {
     if (viewId == null) {
       hydratedRef.current = null; settledRef.current = true; targetRef.current = null; setSettled(true)
       setBars(loadSaved(BARS_KEY, [])); setPies(loadSaved(PIES_KEY, ['segment'])); setTables(loadSaved(TABLES_KEY, []))
-      setCrosses(loadSaved(CROSSES_KEY, []))
+      setCrosses(loadCrosses())
       setBuiltins(true)
       return
     }
@@ -151,7 +156,7 @@ export default function Analytics() {
     const x = sanitize(cfg.excludes && typeof cfg.excludes === 'object' ? cfg.excludes : {})
     const y = typeof cfg.year === 'string' ? cfg.year : 'all'
     const bi = cfg.builtins !== false
-    const c = Array.isArray(cfg.crosses) ? cfg.crosses : []
+    const c = Array.isArray(cfg.crosses) ? cfg.crosses.map(asCross) : []
     setBars(b); setPies(p); setTables(t); setCrosses(c); setBuiltins(bi); setName(view.name)
     lastSavedRef.current = keyOf(b, p, t, f, y, bi, x, c)
     hydratedRef.current = viewId
@@ -341,13 +346,11 @@ export default function Analytics() {
       {/* 5 — two-dimension pivots */}
       {crosses.length > 0 && (
         <div className="space-y-4">
-          {crosses.map((c, i) => {
-            const [d1, d2] = splitCross(c)
-            return (
-              <CrossCard key={`${c}-${i}`} dim1={d1} dim2={d2} yearLabel={label} qs={qs} ready={ready}
-                onPick={(axis, dim) => setCrossDim(i, axis, dim)} onRemove={() => removeCross(i)} />
-            )
-          })}
+          {crosses.map((c, i) => (
+            <CrossCard key={i} spec={c} year={resolvedYear} yearNote={year === 'all' ? ' (latest)' : ''}
+              filterQs={filterQs} ready={ready}
+              onPatch={(patch) => patchCross(i, patch)} onRemove={() => removeCross(i)} />
+          ))}
         </div>
       )}
 
@@ -611,29 +614,53 @@ function TableCard({ dimension, label, year, yearNote, filterQs, ready, onRemove
   )
 }
 
-// CrossCard — the 2-dimension pivot: rows are dimension 1, columns dimension 2.
-// Both axes are pickers, so the table can be re-pointed in place. Values beyond
-// each axis's cut are folded into "Others" server-side, so the grand total still
-// equals the filtered period total.
-function CrossCard({ dim1, dim2, yearLabel, qs, ready, onPick, onRemove }: {
-  dim1: string; dim2: string; yearLabel: string; qs: string; ready: boolean
-  onPick: (axis: 0 | 1, dim: string) => void; onRemove: () => void
+// CrossCard — the 2-dimension monthly table:
+//
+//   Model | Model year | Jan | Feb | … | Total
+//
+// Dimension 1 groups the rows (every value it has, spanned down the first
+// column); dimension 2 is the nested breakdown — top 4 by volume plus "Others"
+// until the user pins their own values, so the group totals always reconcile.
+function CrossCard({ spec, year, yearNote, filterQs, ready, onPatch, onRemove }: {
+  spec: CrossSpec; year: number; yearNote: string; filterQs: string; ready: boolean
+  onPatch: (patch: Partial<CrossSpec>) => void; onRemove: () => void
 }) {
+  const { dim1, dim2, values2 } = spec
   const [res, setRes] = useState<any>(null)
+  const [picking, setPicking] = useState(false)
+  const pickRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (pickRef.current && !pickRef.current.contains(e.target as Node)) setPicking(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  const pinned = (values2 || []).join(',')
   useEffect(() => {
     if (!ready) return
     setRes(null)
-    const p = new URLSearchParams(qs)
-    p.set('dimension1', dim1); p.set('dimension2', dim2)
-    api.cross(p.toString()).then(setRes).catch(() => setRes({ rows: [], cols: [] }))
-  }, [dim1, dim2, qs, ready])
+    const p = new URLSearchParams(filterQs)
+    p.set('dimension1', dim1); p.set('dimension2', dim2); p.set('year', String(year))
+    if (pinned) p.set('values2', pinned)
+    api.cross(p.toString()).then(setRes).catch(() => setRes({ rows: [] }))
+  }, [dim1, dim2, pinned, year, filterQs, ready])
 
-  const cols: string[] = res?.cols || []
   const rows: any[] = res?.rows || []
-  const stickyHead = 'sticky left-0 z-20 bg-bg-2 px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-wide text-t2'
-  const stickyCell = 'sticky left-0 z-10 bg-bg-2 px-4 py-2.5 font-semibold text-t0'
-  const pick = (axis: 0 | 1, value: string) => (
-    <select className={selCls} value={value} onChange={(e) => onPick(axis, e.target.value)}>
+  // Row spans for the dimension-1 column, plus a subtotal row per group.
+  const groups = useMemo(() => {
+    const out: { key: string; rows: any[]; months: number[]; total: number }[] = []
+    for (const r of rows) {
+      let g = out[out.length - 1]
+      if (!g || g.key !== r.key1) { g = { key: r.key1, rows: [], months: Array(12).fill(0), total: 0 }; out.push(g) }
+      g.rows.push(r)
+      r.months.forEach((v: number, i: number) => { g.months[i] += Number(v) })
+      g.total += Number(r.total)
+    }
+    return out
+  }, [rows])
+
+  const dimSelect = (value: string, onChange: (v: string) => void) => (
+    <select className={selCls} value={value} onChange={(e) => onChange(e.target.value)}>
       {DIM_GROUPS.map(([group, dims]) => (
         <optgroup key={group} label={group}>
           {dims.map((k) => <option key={k} value={k}>{labelOf(k)}</option>)}
@@ -641,47 +668,72 @@ function CrossCard({ dim1, dim2, yearLabel, qs, ready, onPick, onRemove }: {
       ))}
     </select>
   )
+  const th = 'sticky top-0 bg-bg-2 px-3 py-3 text-right text-[10.5px] font-bold uppercase tracking-wide text-t2'
+  const thLeft = 'sticky top-0 z-20 bg-bg-2 px-4 py-3 text-left text-[10.5px] font-bold uppercase tracking-wide text-t2'
 
   return (
     <Card padding="none" className="overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
-          <CardTitle>{labelOf(dim1)} × {labelOf(dim2)}</CardTitle>
-          {pick(0, dim1)}<span className="text-[13px] font-bold text-t2">×</span>{pick(1, dim2)}
+          {dimSelect(dim1, (v) => onPatch({ dim1: v }))}
+          <span className="text-[13px] font-bold text-t2">×</span>
+          {dimSelect(dim2, (v) => onPatch({ dim2: v }))}
+          <div className="relative" ref={pickRef}>
+            <Button variant="secondary" size="sm" onClick={() => setPicking((o) => !o)}>
+              {values2?.length ? `${labelOf(dim2)}: ${values2.length} pinned` : `${labelOf(dim2)}: top 4 + Others`}
+            </Button>
+            {picking && (
+              <ValuePicker dim={dim2} selected={values2 || []}
+                onApply={(vals) => { onPatch({ values2: vals.length ? vals : undefined }); setPicking(false) }}
+                onClose={() => setPicking(false)} />
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <CardSubtitle>Units · {yearLabel}</CardSubtitle>
+          <CardSubtitle>Units by month · {year}{yearNote}</CardSubtitle>
           <RemoveBtn label={`${labelOf(dim1)} × ${labelOf(dim2)}`} onClick={onRemove} />
         </div>
       </div>
-      {res === null ? <Loading /> : rows.length ? (
-        <div className="max-h-[560px] overflow-auto">
-          <table className="w-full border-collapse text-sm">
+      {res === null ? <Loading /> : groups.length ? (
+        <div className="max-h-[620px] overflow-auto">
+          <table className="w-full min-w-[920px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-line">
-                <th className={stickyHead + ' top-0 z-30'}>{labelOf(dim1)}</th>
-                {cols.map((c) => (
-                  <th key={c} dir="auto" className="sticky top-0 bg-bg-2 px-3 py-3 text-right text-[10.5px] font-bold uppercase tracking-wide text-t2">{c}</th>
-                ))}
-                <th className="sticky top-0 bg-bg-2 px-4 py-3 text-right text-[10.5px] font-bold uppercase tracking-wide text-t2">Total</th>
+                <th className={thLeft}>{labelOf(dim1)}</th>
+                <th className={thLeft + ' z-20'}>{labelOf(dim2)}</th>
+                {MONTHS.slice(1).map((m) => <th key={m} className={th}>{m}</th>)}
+                <th className={th + ' px-4'}>Total</th>
               </tr>
             </thead>
-            <tbody>
-              {rows.map((r: any) => (
-                <tr key={r.key} className="border-b border-line last:border-0 hover:bg-bg-3">
-                  <td className={stickyCell} dir="auto">{r.key}</td>
-                  {r.cells.map((v: number, i: number) => (
-                    <td key={i} className="px-3 py-2.5 text-right tabular-nums text-t1">{v ? fmt(v) : <span className="text-t2">–</span>}</td>
+            {groups.map((g) => (
+              <tbody key={g.key} className="border-b-2 border-line">
+                {g.rows.map((r: any, i: number) => (
+                  <tr key={r.key2} className="border-b border-line/60 hover:bg-bg-3">
+                    {i === 0 && (
+                      <td rowSpan={g.rows.length + 1} dir="auto"
+                        className="border-r border-line px-4 py-2.5 align-top font-semibold text-t0">{g.key}</td>
+                    )}
+                    <td dir="auto" className="px-4 py-2.5 text-t1">{r.key2}</td>
+                    {r.months.map((v: number, mi: number) => (
+                      <td key={mi} className="px-3 py-2.5 text-right tabular-nums text-t1">{Number(v) ? fmt(v) : <span className="text-t2">–</span>}</td>
+                    ))}
+                    <td className="px-4 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(r.total)}</td>
+                  </tr>
+                ))}
+                <tr className="bg-bg-inset">
+                  <td className="px-4 py-2 text-[12px] font-bold uppercase tracking-wide text-t2">Total</td>
+                  {g.months.map((v, mi) => (
+                    <td key={mi} className="px-3 py-2 text-right font-bold tabular-nums text-t0">{v ? fmt(v) : <span className="text-t2">–</span>}</td>
                   ))}
-                  <td className="px-4 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(r.total)}</td>
+                  <td className="px-4 py-2 text-right font-extrabold tabular-nums text-t0">{fmt(g.total)}</td>
                 </tr>
-              ))}
-            </tbody>
+              </tbody>
+            ))}
             <tfoot>
               <tr className="border-t-2 border-line bg-bg-inset">
-                <td className={stickyCell.replace('bg-bg-2', 'bg-bg-inset') + ' font-bold'}>Total</td>
-                {(res.col_totals || []).map((v: number, i: number) => (
-                  <td key={i} className="px-3 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(v)}</td>
+                <td colSpan={2} className="px-4 py-2.5 font-bold text-t0">Grand total</td>
+                {(res.months || []).map((v: number, mi: number) => (
+                  <td key={mi} className="px-3 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(v)}</td>
                 ))}
                 <td className="px-4 py-2.5 text-right font-extrabold tabular-nums text-t0">{fmt(res.grand || 0)}</td>
               </tr>

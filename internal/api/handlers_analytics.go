@@ -117,9 +117,14 @@ func (s *Server) analyticsAgg(w http.ResponseWriter, r *http.Request) {
 func (s *Server) analyticsCross(w http.ResponseWriter, r *http.Request) {
 	p := parseMatrixParams(r)
 	q := r.URL.Query()
+	var values2 []string
+	if v := q.Get("values2"); v != "" {
+		values2 = splitCSV(v)
+	}
 	res, err := analytics.Cross(r.Context(), s.pool,
 		or(q.Get("dimension1"), "brand"), or(q.Get("dimension2"), "region"),
-		p.Filters, atoiOr(q.Get("year"), 0), atoiOr(q.Get("row_limit"), 0), atoiOr(q.Get("col_limit"), 0))
+		p.Filters, atoiOr(q.Get("year"), 0), values2,
+		atoiOr(q.Get("top2"), 0), atoiOr(q.Get("row_limit"), 0))
 	if err != nil {
 		httpErr(w, http.StatusBadRequest, err.Error())
 		return
