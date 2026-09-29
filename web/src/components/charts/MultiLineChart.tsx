@@ -5,7 +5,12 @@ export interface LineSeries {
   data: number[];
   color: string;
   dashed?: boolean;
+  /** Explicit SVG dash pattern; wins over `dashed`. Lets a caller distinguish
+   *  more than two overlaid groups (solid / dashed / dotted). */
+  dash?: string;
 }
+
+const dashOf = (s: LineSeries) => s.dash ?? (s.dashed ? "6 4" : undefined);
 
 function buildSmoothPath(points: { x: number; y: number }[]) {
   if (points.length < 2) return "";
@@ -74,7 +79,7 @@ export function MultiLineChart({ series, labels, height = 260, yMax, formatValue
           )}
           {paths.map(({ s, d }, i) => (
             <path key={i} d={d} fill="none" stroke={s.color} strokeWidth="2.5"
-              strokeDasharray={s.dashed ? "6 4" : undefined}
+              strokeDasharray={dashOf(s)}
               strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           ))}
           {hoverIdx !== null && paths.map(({ s, pts }, i) => {
@@ -110,7 +115,7 @@ export function MultiLineChart({ series, labels, height = 260, yMax, formatValue
         {series.map((s, i) => (
           <div key={i} className="flex items-center gap-1.5 text-[12px]">
             <span className="h-0.5 w-4 shrink-0 rounded-full"
-              style={{ background: s.dashed ? `repeating-linear-gradient(90deg, ${s.color} 0 4px, transparent 4px 7px)` : s.color }} />
+              style={{ background: dashOf(s) ? `repeating-linear-gradient(90deg, ${s.color} 0 4px, transparent 4px 7px)` : s.color }} />
             <span className="text-t1">{s.name}</span>
           </div>
         ))}

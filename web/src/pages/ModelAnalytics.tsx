@@ -8,7 +8,12 @@ import { useViews, type ModelViewConfig } from '@/lib/views'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const PALETTE = ['var(--acc)', 'var(--info)', 'var(--ok)', 'var(--warn)', 'var(--bad)', 'var(--acc-2)', '#c084fc', '#22d3ee', '#f472b6', '#a3e635', '#fb923c', '#38bdf8']
-const MODEL_COLORS = ['var(--acc)', 'var(--info)'] // A, B
+const MODEL_COLORS = ['var(--acc)', 'var(--info)', 'var(--ok)'] // A, B, C
+// One line style per slot so three overlaid models stay tellable apart even
+// where they share a dimension-value colour: A solid, B dashed, C dotted.
+const MODEL_DASH: (string | undefined)[] = [undefined, '6 4', '2 3']
+const slotSwatch = (color: string, i: number) =>
+  i === 0 ? color : `repeating-linear-gradient(90deg, ${color} 0 3px, transparent 3px 6px)`
 const selCls = 'h-9 rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-2.5 text-[13px] text-t0'
 const fieldCls = 'h-9 w-full rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-3 text-[13px] text-t0 focus:border-acc'
 
@@ -44,13 +49,12 @@ const SPECS: [string, (m: any) => string][] = [
 ]
 const val = (v: any) => (v == null || v === '' ? '—' : String(v))
 
-/** "KIA Sportage vs Nissan Sunny (2026)" — or one model, or neither. */
-function autoName(a: any, b: any, year: string | number) {
-  const n = (m: any) => `${m.brand} ${m.name}`
+/** "KIA Sportage vs Nissan Sunny (2026)" — or one model, or none. */
+function autoName(models: any[], year: string | number) {
   const y = year ? ` (${year})` : ''
-  if (a && b) return `${n(a)} vs ${n(b)}${y}`
-  const one = a || b
-  return one ? `${n(one)}${y}` : `Model comparison${y}`
+  const picked = models.filter(Boolean)
+  if (!picked.length) return `Model comparison${y}`
+  return picked.map((m) => `${m.brand} ${m.name}`).join(' vs ') + y
 }
 
 export default function ModelAnalytics() {
@@ -64,6 +68,7 @@ export default function ModelAnalytics() {
 
   const idA = sp.get('a') ? Number(sp.get('a')) : null
   const idB = sp.get('b') ? Number(sp.get('b')) : null
+  const idC = sp.get('c') ? Number(sp.get('c')) : null
   const measure = (sp.get('measure') || 'total') as Measure
   const scope = sp.get('vals') ? sp.get('vals')!.split(',').filter(Boolean) : []
   const year = sp.get('year') || ''
@@ -89,28 +94,36 @@ export default function ModelAnalytics() {
 
   const [mA, setMA] = useState<any>(null)
   const [mB, setMB] = useState<any>(null)
+  const [mC, setMC] = useState<any>(null)
   const ready = viewId == null || (hydratedRef.current === viewId && settled)
   useEffect(() => { if (!ready) return; if (idA) api.model(idA).then(setMA).catch(() => setMA(null)); else setMA(null) }, [idA, ready])
   useEffect(() => { if (!ready) return; if (idB) api.model(idB).then(setMB).catch(() => setMB(null)); else setMB(null) }, [idB, ready])
+  useEffect(() => { if (!ready) return; if (idC) api.model(idC).then(setMC).catch(() => setMC(null)); else setMC(null) }, [idC, ready])
 
-  const models = [mA, mB].filter(Boolean)
+  // Slots stay positional: the colour and line style of a model follow the
+  // picker it was chosen in, so clearing B does not recolour C.
+  const slots = [mA, mB, mC]
+  const picked = slots.map((m, i) => ({ m, i })).filter((s) => s.m) as { m: any; i: number }[]
+  const models = picked.map((p) => p.m)
   // Counts every highlighted row (specs + the active span) so the badge matches
   // what the table actually flags. Total units is excluded — it nearly always
   // differs, so it is not treated as a meaningful difference.
   const spanOf = (m: any) => `${m.first_period || '—'} → ${m.last_period || '—'}`
-  const diffCount = mA && mB
-    ? SPECS.filter(([, get]) => val(get(mA)) !== val(get(mB))).length +
-      (spanOf(mA) !== spanOf(mB) ? 1 : 0)
+  const differsAcross = (get: (m: any) => string) => new Set(models.map((m) => get(m))).size > 1
+  const diffCount = models.length > 1
+    ? SPECS.filter(([, get]) => differsAcross((m) => val(get(m)))).length +
+      (differsAcross(spanOf) ? 1 : 0)
     : 0
 
   // ── saved-view sync ─────────────────────────────────────────────────────────
 
-  const cfgKey = (c: ModelViewConfig) => JSON.stringify([c.a, c.b, c.year, c.measure, [...c.vals].sort()])
-  const current: ModelViewConfig = { kind: 'model', a: idA, b: idB, year, measure, vals: scope }
+  const cfgKey = (c: ModelViewConfig) => JSON.stringify([c.a, c.b, c.c ?? null, c.year, c.measure, [...c.vals].sort()])
+  const current: ModelViewConfig = { kind: 'model', a: idA, b: idB, c: idC, year, measure, vals: scope }
   const applyCfg = (c: ModelViewConfig) => {
     const n = new URLSearchParams()
     if (c.a) n.set('a', String(c.a))
     if (c.b) n.set('b', String(c.b))
+    if (c.c) n.set('c', String(c.c))
     if (c.year) n.set('year', String(c.year))
     if (c.measure && c.measure !== 'total') n.set('measure', c.measure)
     if (c.vals?.length) n.set('vals', c.vals.join(','))
@@ -124,7 +137,7 @@ export default function ModelAnalytics() {
     const c = (view.config || {}) as ModelViewConfig
     const t: ModelViewConfig = {
       kind: 'model',
-      a: c.a ?? null, b: c.b ?? null,
+      a: c.a ?? null, b: c.b ?? null, c: c.c ?? null,
       year: typeof c.year === 'string' ? c.year : String(c.year ?? ''),
       measure: c.measure || 'total',
       vals: Array.isArray(c.vals) ? c.vals : [],
@@ -163,7 +176,7 @@ export default function ModelAnalytics() {
     const wasCustom = (view.config as ModelViewConfig)?.custom
     // A hand-typed name sticks; otherwise keep regenerating it from the selection.
     const custom = wasCustom || nameEdited
-    const name = custom ? nameDraft.trim() : autoName(mA, mB, year)
+    const name = custom ? nameDraft.trim() : autoName(slots, year)
     setSaveStatus('saving')
     try {
       await saveConfig(viewId, { ...current, custom }, name)
@@ -173,7 +186,7 @@ export default function ModelAnalytics() {
   }
 
   const saveAsView = async () => {
-    const name = nameEdited ? nameDraft.trim() : autoName(mA, mB, year)
+    const name = nameEdited ? nameDraft.trim() : autoName(slots, year)
     try {
       const v = await create(name, { ...current, custom: nameEdited || undefined })
       navigate(`/models/view/${v.id}`)
@@ -207,7 +220,7 @@ export default function ModelAnalytics() {
           ) : (
             <>
               <h1 className="text-xl font-extrabold text-t0 sm:text-[26px]">Model Comparison</h1>
-              <p className="mt-1 text-[13px] text-t1">Compare two models — specs and monthly sales.</p>
+              <p className="mt-1 text-[13px] text-t1">Compare up to three models — specs and monthly sales.</p>
             </>
           )}
         </div>
@@ -219,7 +232,7 @@ export default function ModelAnalytics() {
               <Button variant="outline" size="sm" onClick={deleteView}>Delete view</Button>
             </>
           ) : (
-            <Button variant="primary" size="sm" disabled={!mA && !mB} onClick={saveAsView}>Save view</Button>
+            <Button variant="primary" size="sm" disabled={!models.length} onClick={saveAsView}>Save view</Button>
           )}
           <label className="flex items-center gap-2 text-[12px] font-semibold text-t1">
             Year
@@ -232,11 +245,13 @@ export default function ModelAnalytics() {
 
       {/* ── Selectors ─────────────────────────────────────────────────────── */}
       <Card>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <ModelPicker label="Main model" color={MODEL_COLORS[0]} model={mA}
             onPick={(m) => setParam('a', String(m.id))} onClear={() => setParam('a', null)} />
           <ModelPicker label="Compare to" color={MODEL_COLORS[1]} model={mB} optional
             onPick={(m) => setParam('b', String(m.id))} onClear={() => setParam('b', null)} />
+          <ModelPicker label="And to" color={MODEL_COLORS[2]} model={mC} optional
+            onPick={(m) => setParam('c', String(m.id))} onClear={() => setParam('c', null)} />
         </div>
       </Card>
 
@@ -250,20 +265,20 @@ export default function ModelAnalytics() {
           <Card>
             <CardHeader>
               <div><CardTitle>Model details</CardTitle>
-                <CardSubtitle>{mA && mB ? 'Side-by-side comparison' : 'Specifications'}</CardSubtitle></div>
-              {mA && mB && (
+                <CardSubtitle>{models.length > 1 ? 'Side-by-side comparison' : 'Specifications'}</CardSubtitle></div>
+              {models.length > 1 && (
                 <Badge variant={diffCount ? 'warning' : 'success'}>
                   {diffCount ? `${diffCount} difference${diffCount > 1 ? 's' : ''}` : 'Identical specs'}
                 </Badge>
               )}
             </CardHeader>
 
-            {mA && mB ? (
+            {models.length > 1 ? (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] border-collapse text-sm">
                   <thead><tr className="border-b border-line">
                     <th className="px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-wide text-t2">Spec</th>
-                    {[mA, mB].map((m, i) => (
+                    {picked.map(({ m, i }) => (
                       <th key={i} className="px-3 py-2.5 text-left text-[12.5px] font-bold text-t0">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="h-2.5 w-2.5 rounded-full" style={{ background: MODEL_COLORS[i] }} />
@@ -274,25 +289,24 @@ export default function ModelAnalytics() {
                   </tr></thead>
                   <tbody>
                     {SPECS.map(([label, get]) => {
-                      const a = val(get(mA)), b = val(get(mB))
-                      const differs = a !== b
+                      const differs = differsAcross((m) => val(get(m)))
                       return (
                         <tr key={label} className={'border-b border-line last:border-0 ' + (differs ? 'bg-warn-soft' : '')}>
                           <td className="px-3 py-2.5 text-[12.5px] text-t2">{label}</td>
-                          <td className={'px-3 py-2.5 text-[13px] ' + (differs ? 'font-bold text-warn' : 'text-t1')}>{a}</td>
-                          <td className={'px-3 py-2.5 text-[13px] ' + (differs ? 'font-bold text-warn' : 'text-t1')}>{b}</td>
+                          {models.map((m, i) => (
+                            <td key={i} className={'px-3 py-2.5 text-[13px] ' + (differs ? 'font-bold text-warn' : 'text-t1')}>{val(get(m))}</td>
+                          ))}
                         </tr>
                       )
                     })}
                     {(() => {
-                      const span = (m: any) => `${m.first_period || '—'} → ${m.last_period || '—'}`
-                      const differs = span(mA) !== span(mB)
+                      const differs = differsAcross(spanOf)
                       return (
                         <tr className={'border-t-2 border-line ' + (differs ? 'bg-warn-soft' : '')}>
                           <td className="px-3 py-2.5 text-[12.5px] text-t2">Active</td>
-                          {[mA, mB].map((m, i) => (
+                          {models.map((m, i) => (
                             <td key={i} className={'whitespace-nowrap px-3 py-2.5 text-[13px] font-bold ' + (differs ? 'text-warn' : 'text-t1')}>
-                              {span(m)}
+                              {spanOf(m)}
                             </td>
                           ))}
                         </tr>
@@ -302,7 +316,7 @@ export default function ModelAnalytics() {
                         differ in volume, so flagging it would be noise. */}
                     <tr className="border-t border-line">
                       <td className="px-3 py-2.5 text-[12.5px] text-t2">Total units (all time)</td>
-                      {[mA, mB].map((m, i) => (
+                      {models.map((m, i) => (
                         <td key={i} className="px-3 py-2.5 text-[13px] font-bold tabular-nums text-t0">{fmt(m.total_volume)}</td>
                       ))}
                     </tr>
@@ -330,7 +344,7 @@ export default function ModelAnalytics() {
           </Card>
 
           {/* ── Sales graph ───────────────────────────────────────────────── */}
-          <SalesGraph models={[mA, mB]} year={resolvedYear} measure={measure} scope={scope} ready={ready}
+          <SalesGraph models={slots} year={resolvedYear} measure={measure} scope={scope} ready={ready}
             onMeasure={(m) => { setSp((prev) => { const n = new URLSearchParams(prev); n.set('measure', m); n.delete('vals'); return n }, { replace: true }) }}
             onScope={(v) => setParam('vals', v.length ? v.join(',') : null)} />
         </>
@@ -428,8 +442,8 @@ function SalesGraph({ models, year, measure, scope, ready, onMeasure, onScope }:
   const [pickerOpen, setPickerOpen] = useState(false)
   const pickRef = useRef<HTMLDivElement>(null)
   const [data, setData] = useState<Record<number, any[]> | null>(null)
-  const present = models.filter(Boolean) as any[]
-  const key = present.map((m) => m.id).join(',') + '|' + year + '|' + measure + '|' + scope.join(',')
+  const present = models.map((m, i) => (m ? { ...m, _slot: i } : null)).filter(Boolean) as any[]
+  const key = present.map((m) => `${m._slot}:${m.id}`).join(',') + '|' + year + '|' + measure + '|' + scope.join(',')
 
   useEffect(() => {
     const h = (e: MouseEvent) => { if (pickRef.current && !pickRef.current.contains(e.target as Node)) setPickerOpen(false) }
@@ -505,13 +519,14 @@ function SalesGraph({ models, year, measure, scope, ready, onMeasure, onScope }:
 
   let single: LineSeries[] = []
   if (data && !perModelMode) {
-    present.forEach((m, mi) => {
+    present.forEach((m) => {
       const rows = data[m.id] || []
+      const dash = MODEL_DASH[m._slot]
       if (measure === 'total') {
-        single.push({ name: `${m.brand} ${m.name}`, data: rows[0]?.months || Array(12).fill(0), color: MODEL_COLORS[mi], dashed: mi === 1 })
+        single.push({ name: `${m.brand} ${m.name}`, data: rows[0]?.months || Array(12).fill(0), color: MODEL_COLORS[m._slot], dash })
       } else {
         rows.forEach((r: any) => {
-          single.push({ name: `${m.brand} ${m.name} — ${r.key}`, data: r.months, color: colorOf(r.key), dashed: mi === 1 })
+          single.push({ name: `${m.brand} ${m.name} — ${r.key}`, data: r.months, color: colorOf(r.key), dash })
         })
       }
     })
@@ -525,16 +540,16 @@ function SalesGraph({ models, year, measure, scope, ready, onMeasure, onScope }:
   const tableRows = useMemo(() => {
     if (!data) return []
     const out: { model: string; mi: number; key: string; months: number[]; total: number; color: string }[] = []
-    present.forEach((m, mi) => {
+    present.forEach((m) => {
       (data[m.id] || []).forEach((r: any) => {
         const months: number[] = (r.months || []).map(Number)
         out.push({
           model: `${m.brand} ${m.name}`,
-          mi,
+          mi: m._slot,
           key: r.key,
           months,
           total: months.reduce((s, v) => s + v, 0),
-          color: measure === 'total' ? MODEL_COLORS[mi] : colorOf(r.key),
+          color: measure === 'total' ? MODEL_COLORS[m._slot] : colorOf(r.key),
         })
       })
     })
@@ -594,13 +609,13 @@ function SalesGraph({ models, year, measure, scope, ready, onMeasure, onScope }:
 
       {data === null ? <Loading /> : perModelMode ? (
         <div className="space-y-5">
-          {present.map((m, mi) => {
+          {present.map((m) => {
             const rows = data[m.id] || []
             const series: LineSeries[] = rows.map((r: any) => ({ name: r.key, data: r.months, color: colorOf(r.key) }))
             return (
               <div key={m.id}>
                 <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-bold text-t0">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: MODEL_COLORS[mi] }} />
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: MODEL_COLORS[m._slot] }} />
                   {m.brand} {m.name}
                 </div>
                 {series.length ? <MultiLineChart series={series} labels={MONTHS} height={240} yMax={globalMax} formatValue={(v) => fmt(v)} /> : <Empty />}
@@ -645,7 +660,7 @@ function SalesGraph({ models, year, measure, scope, ready, onMeasure, onScope }:
                     {showModelCol && (
                       <td className="whitespace-nowrap px-3 py-2 text-[12.5px] font-semibold text-t1">
                         <span className="mr-1.5 inline-block h-0.5 w-3.5 align-middle"
-                          style={{ background: r.mi === 1 ? `repeating-linear-gradient(90deg, ${r.color} 0 3px, transparent 3px 6px)` : r.color }} />
+                          style={{ background: slotSwatch(r.color, r.mi) }} />
                         {r.model}
                       </td>
                     )}

@@ -34,11 +34,13 @@ export function nextReportName(views: SavedView[], base = 'New Report'): string 
   for (let i = 2; ; i++) if (!taken.has(`${base} ${i}`)) return `${base} ${i}`
 }
 
-// Model Comparison view: the two models + the graph controls.
+// Model Comparison view: up to three models + the graph controls.
 export type ModelViewConfig = {
   kind: 'model'
   a: number | null
   b: number | null
+  /** Third slot; absent in views saved before it existed. */
+  c?: number | null
   year: string
   measure: string
   vals: string[]
