@@ -6,12 +6,14 @@ package tree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
 
 	"github.com/Mina-Nabil/mc-sales-analysis/internal/domain"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -100,18 +102,28 @@ func CreateModel(ctx context.Context, pool *pgxpool.Pool, brandID int64, name, c
 // EditModel updates model attributes. Nothing is stored on facts, so changing a
 // segment re-derives all history automatically via joins; we still record
 // the affected volume in change_log for the impact trail (§6.3).
+//
+// Every attribute is REPLACED, not merged: an empty string (or a nil segment)
+// clears the column to NULL. The editor is a full form that always submits its
+// complete state, and the previous COALESCE(NULLIF(…)) form made a wrongly-set
+// car_type / engine_type / supply impossible to reset through the API at all.
+// name is the one exception — it is required, so an empty name is rejected.
 func EditModel(ctx context.Context, pool *pgxpool.Pool, id int64, name, carType, engineType, supply string, segmentID *int64, actorID int64) error {
+	name = applyCasing(name)
+	if name == "" {
+		return fmt.Errorf("model name required")
+	}
 	var units int
 	_ = pool.QueryRow(ctx, `SELECT COALESCE(sum(volume),0) FROM facts WHERE model_id=$1`, id).Scan(&units)
 	ct, err := pool.Exec(ctx, `
 		UPDATE models SET
-		  name = COALESCE(NULLIF($2,''), name),
-		  car_type = COALESCE(NULLIF($3,''), car_type),
-		  segment_id = COALESCE($4, segment_id),
-		  engine_type = COALESCE(NULLIF($5,''), engine_type),
-		  supply = COALESCE(NULLIF($6,''), supply),
+		  name = $2,
+		  car_type = $3,
+		  segment_id = $4,
+		  engine_type = $5,
+		  supply = $6,
 		  updated_at = now()
-		WHERE id=$1`, id, applyCasing(name), carType, segmentID, engineType, supply)
+		WHERE id=$1`, id, name, nullIf(carType), segmentID, nullIf(engineType), nullIf(supply))
 	if err != nil {
 		return err
 	}
@@ -119,6 +131,61 @@ func EditModel(ctx context.Context, pool *pgxpool.Pool, id int64, name, carType,
 		return fmt.Errorf("model %d not found", id)
 	}
 	return logChange(ctx, pool, "model", id, "edit", actorID, units)
+}
+
+// EditBrand updates a brand's own attributes. origin is brand-level and reaches
+// every fact of the brand by JOIN (analytics.dimensions["origin"] is
+// COALESCE(b.origin,'Unknown')), so nothing has to be re-derived — the edit is
+// visible across all history the moment it commits. The affected unit count is
+// still logged for the impact trail (§2.6).
+//
+// Like EditModel this REPLACES every attribute: "" clears origin/notes and a nil
+// parentID detaches the brand from its parent.
+func EditBrand(ctx context.Context, pool *pgxpool.Pool, id int64, name, origin, notes string, parentID *int64, actorID int64) error {
+	name = applyCasing(name)
+	if name == "" {
+		return fmt.Errorf("brand name required")
+	}
+	if parentID != nil {
+		if *parentID == id {
+			return fmt.Errorf("a brand cannot be its own parent")
+		}
+		// parent_brand_id is a self-FK with no cycle guard in the schema; a loop
+		// would hang any recursive walk of the brand hierarchy.
+		var cycles bool
+		if err := pool.QueryRow(ctx, `
+			WITH RECURSIVE up AS (
+				SELECT id, parent_brand_id FROM brands WHERE id = $1
+				UNION ALL
+				SELECT b.id, b.parent_brand_id FROM brands b JOIN up ON b.id = up.parent_brand_id
+			)
+			SELECT EXISTS (SELECT 1 FROM up WHERE id = $2)`, *parentID, id).Scan(&cycles); err != nil {
+			return fmt.Errorf("parent cycle check: %w", err)
+		}
+		if cycles {
+			return fmt.Errorf("that parent is already a child of this brand — the hierarchy would loop")
+		}
+	}
+	var units int
+	_ = pool.QueryRow(ctx, `SELECT COALESCE(sum(volume),0) FROM facts WHERE brand_id=$1`, id).Scan(&units)
+	ct, err := pool.Exec(ctx, `
+		UPDATE brands SET
+		  name = $2,
+		  origin = $3,
+		  notes = $4,
+		  parent_brand_id = $5,
+		  updated_at = now()
+		WHERE id=$1`, id, name, nullIf(origin), nullIf(notes), parentID)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return fmt.Errorf("another brand is already named %q", name)
+		}
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return fmt.Errorf("brand %d not found", id)
+	}
+	return logChange(ctx, pool, "brand", id, "edit", actorID, units)
 }
 
 // MergeInfo previews a merge.
@@ -332,6 +399,13 @@ func CreateModelForReview(ctx context.Context, pool *pgxpool.Pool, aliasID int64
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
+// isUniqueViolation reports whether err is a Postgres unique-constraint failure,
+// so callers can turn it into a human message instead of leaking the SQL.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
 func nullIf(s string) any {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -339,16 +413,27 @@ func nullIf(s string) any {
 	return s
 }
 
+// actor maps an actor id to what change_log.actor_id should hold. The column is
+// nullable and every non-HTTP path in the codebase leaves it NULL, so a 0 — a CLI
+// or test invocation with no signed-in user — must become NULL rather than a 0
+// that violates the users FK and loses the audit row entirely.
+func actor(actorID int64) any {
+	if actorID == 0 {
+		return nil
+	}
+	return actorID
+}
+
 func logChange(ctx context.Context, pool *pgxpool.Pool, entity string, id int64, action string, actorID int64, units int) error {
 	_, err := pool.Exec(ctx,
 		`INSERT INTO change_log (entity_type, entity_id, action, actor_id, actor_kind, volume_impact)
-		 VALUES ($1,$2,$3,$4,'human',$5)`, entity, id, action, actorID, units)
+		 VALUES ($1,$2,$3,$4,'human',$5)`, entity, id, action, actor(actorID), units)
 	return err
 }
 
 func logChangeTx(ctx context.Context, tx pgx.Tx, entity string, id int64, action string, actorID int64, units int) error {
 	_, err := tx.Exec(ctx,
 		`INSERT INTO change_log (entity_type, entity_id, action, actor_id, actor_kind, volume_impact)
-		 VALUES ($1,$2,$3,$4,'human',$5)`, entity, id, action, actorID, units)
+		 VALUES ($1,$2,$3,$4,'human',$5)`, entity, id, action, actor(actorID), units)
 	return err
 }

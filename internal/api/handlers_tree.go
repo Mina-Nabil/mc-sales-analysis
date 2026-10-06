@@ -11,6 +11,9 @@ func (s *Server) createBrand(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		Origin   string `json:"origin"`
 		ParentID *int64 `json:"parent_id"`
+		// optional first distributor assignment, so a brand can be born complete
+		CarType       string `json:"car_type"`
+		DistributorID int64  `json:"distributor_id"`
 	}
 	if err := readJSON(r, &req); err != nil || req.Name == "" {
 		httpErr(w, http.StatusBadRequest, "name required")
@@ -21,7 +24,15 @@ func (s *Server) createBrand(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "name": name})
+	out := map[string]any{"id": id, "name": name}
+	if req.DistributorID != 0 && req.CarType != "" {
+		if err := s.applyAssignment(r, id, assignmentReq{
+			CarType: req.CarType, DistributorID: req.DistributorID}); err != nil {
+			// The brand exists; report the assignment failure without losing it.
+			out["distributor_error"] = err.Error()
+		}
+	}
+	writeJSON(w, http.StatusCreated, out)
 }
 
 func (s *Server) createModel(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +218,9 @@ func (s *Server) resolveBrand(w http.ResponseWriter, r *http.Request) {
 			Name     string `json:"name"`
 			Origin   string `json:"origin"`
 			ParentID *int64 `json:"parent_id"`
+			// optional first distributor assignment (see createBrand)
+			CarType       string `json:"car_type"`
+			DistributorID int64  `json:"distributor_id"`
 		} `json:"new_brand"`
 	}
 	if err := readJSON(r, &req); err != nil || req.RawBrand == "" {
@@ -215,6 +229,7 @@ func (s *Server) resolveBrand(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	brandID := req.BrandID
+	var distErr string
 	if req.NewBrand != nil && req.NewBrand.Name != "" {
 		id, _, err := tree.CreateBrand(ctx, s.pool, req.NewBrand.Name, req.NewBrand.Origin, req.NewBrand.ParentID, s.user(r).ID)
 		if err != nil {
@@ -222,6 +237,12 @@ func (s *Server) resolveBrand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		brandID = id
+		if req.NewBrand.DistributorID != 0 && req.NewBrand.CarType != "" {
+			if err := s.applyAssignment(r, id, assignmentReq{
+				CarType: req.NewBrand.CarType, DistributorID: req.NewBrand.DistributorID}); err != nil {
+				distErr = err.Error() // the brand exists; don't lose the reason
+			}
+		}
 	}
 	if brandID == 0 {
 		httpErr(w, http.StatusBadRequest, "provide brand_id or new_brand")
@@ -232,8 +253,12 @@ func (s *Server) resolveBrand(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, http.StatusConflict, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"brand_id": brandID, "facts_rederived": units, "replay": s.replayLadder(r)})
+	out := map[string]any{
+		"brand_id": brandID, "facts_rederived": units, "replay": s.replayLadder(r)}
+	if distErr != "" {
+		out["distributor_error"] = distErr
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) reviewNewModel(w http.ResponseWriter, r *http.Request) {

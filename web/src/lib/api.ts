@@ -77,12 +77,21 @@ export const api = {
   years: () => req('GET', '/analytics/years'),
   distributors: () => req('GET', '/distributors'),
 
+  brand: (id: number) => req('GET', `/brands/${id}`),
   createBrand: (b: any) => req('POST', '/brands', b),
+  editBrand: (id: number, fields: any) => req('PATCH', `/brands/${id}`, fields),
   createModel: (m: any) => req('POST', '/models', m),
   editModel: (id: number, fields: any) => req('PATCH', `/models/${id}`, fields),
   mergePreview: (id: number, intoId: number) => req('GET', `/models/${id}/merge-preview?into_id=${intoId}`),
   merge: (id: number, intoId: number) => req('POST', `/models/${id}/merge`, { into_id: intoId }),
   deleteAlias: (id: number) => req('DELETE', `/aliases/${id}`),
+
+  // distributor is an effective-dated assignment on (brand, car_type) — not a
+  // column on a brand or a model.
+  brandAssignments: (id: number) => req('GET', `/brands/${id}/distributors`),
+  setBrandAssignment: (id: number, a: any) => req('POST', `/brands/${id}/distributors`, a),
+  deleteBrandAssignment: (id: number) => req('DELETE', `/distributor-assignments/${id}`),
+  createDistributor: (name: string) => req('POST', '/distributors', { name }),
 
   brandQueue: (limit = 100) => req('GET', `/review/brands?limit=${limit}`),
   resolveBrand: (body: any) => req('POST', '/review/brands/resolve', body),

@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, fmt } from '@/lib/api'
 import { Card, Button, Badge, Modal } from '@/components/ui'
+import { CAR_TYPES, ENGINES, SUPPLIES, ORIGINS, field } from '@/lib/vocab'
+import { BrandInherited } from '@/components/BrandInherited'
 
-const CAR_TYPES = ['Passenger', 'Commercial', 'Bus', 'Construction']
-const ENGINES = ['ICE', 'HYBRID', 'BEV', 'REEV', 'Other']
-const SUPPLIES = ['CKD', 'SUP']
-const ORIGINS = ['China', 'Europe', 'Japan', 'Korea', 'USA', 'India', 'Russia', 'UAE', 'Egypt', 'Others']
-const field = 'h-9 w-full rounded-[var(--radius-vela-md)] border border-line bg-bg-inset px-3 text-[13px] text-t0 focus:border-acc'
 
 export default function Review() {
   const [tab, setTab] = useState<'models' | 'brands'>('models')
@@ -171,14 +168,15 @@ export default function Review() {
         </Card>
       )}
 
-      <NewModelModal item={newModelFor} segments={segments} onClose={() => setNewModelFor(null)}
+      <NewModelModal item={newModelFor} segments={segments} onClose={() => setNewModelFor(null)} onMessage={setMsg}
         onSubmit={(body) => { const it = newModelFor; setNewModelFor(null); act(() => api.newModelForReview(it.alias_id, body), (r) => `Created model, re-derived ${fmt(r.facts_rederived)} facts.`) }} />
       <MergeModal item={mergeFor} onClose={() => setMergeFor(null)}
         onSubmit={(modelID: number) => { const it = mergeFor; setMergeFor(null); mergeInto(it, modelID) }} />
       <ExcludeModal item={excludeFor} onClose={() => setExcludeFor(null)}
         onSubmit={(reason: string) => { const it = excludeFor; setExcludeFor(null); exclude(it, reason) }} />
       <BrandResolveModal item={resolveFor} brands={brands} onClose={() => setResolveFor(null)}
-        onSubmit={(body) => { const it = resolveFor; setResolveFor(null); act(() => api.resolveBrand({ raw_brand: it.raw_brand, ...body }), (r) => `Resolved — ${fmt(r.facts_rederived)} facts now carry the brand.`) }} />
+        onSubmit={(body) => { const it = resolveFor; setResolveFor(null); act(() => api.resolveBrand({ raw_brand: it.raw_brand, ...body }), (r) => `Resolved — ${fmt(r.facts_rederived)} facts now carry the brand.`
+          + (r.distributor_error ? ` The distributor was not set: ${r.distributor_error}` : '')) }} />
     </div>
   )
 }
@@ -256,7 +254,7 @@ function ExcludeModal({ item, onClose, onSubmit }: any) {
   )
 }
 
-function NewModelModal({ item, segments, onClose, onSubmit }: any) {
+function NewModelModal({ item, segments, onClose, onSubmit, onMessage }: any) {
   const [name, setName] = useState('')
   const [carType, setCarType] = useState('Passenger')
   const [segmentId, setSegmentId] = useState('')
@@ -273,7 +271,8 @@ function NewModelModal({ item, segments, onClose, onSubmit }: any) {
       <Field label="Segment"><select className={field} value={segmentId} onChange={(e) => setSegmentId(e.target.value)}><option value="">—</option>{segments.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
       <Field label="Engine"><select className={field} value={engine} onChange={(e) => setEngine(e.target.value)}><option value="">—</option>{ENGINES.map((t) => <option key={t}>{t}</option>)}</select></Field>
       <Field label="Supply"><select className={field} value={supply} onChange={(e) => setSupply(e.target.value)}><option value="">—</option>{SUPPLIES.map((t) => <option key={t}>{t}</option>)}</select></Field>
-      <p className="mt-1 text-[11px] text-t2">Engine and supply are model-level specs — the monthly feed carries neither, so they apply to every month of this model's facts.</p>
+      <p className="mb-3 mt-1 text-[11px] text-t2">Engine and supply are model-level specs — the monthly feed carries neither, so they apply to every month of this model's facts.</p>
+      <BrandInherited brandId={item.brand_id} brandName={item.brand} carType={carType} onMessage={onMessage} />
     </Modal>
   )
 }
@@ -283,12 +282,28 @@ function BrandResolveModal({ item, brands, onClose, onSubmit }: any) {
   const [brandId, setBrandId] = useState('')
   const [name, setName] = useState('')
   const [origin, setOrigin] = useState('China')
-  useEffect(() => { if (item) { setMode('existing'); setBrandId(''); setName(''); setOrigin('China') } }, [item])
+  const [parent, setParent] = useState('')
+  const [carType, setCarType] = useState('Passenger')
+  const [distId, setDistId] = useState('')
+  const [distributors, setDistributors] = useState<any[]>([])
+  useEffect(() => {
+    if (item) {
+      setMode('existing'); setBrandId(''); setName(''); setOrigin('China')
+      setParent(''); setCarType('Passenger'); setDistId('')
+      api.distributors().then(setDistributors).catch(() => {})
+    }
+  }, [item])
   if (!item) return null
+  const newBrand = {
+    name, origin,
+    parent_id: parent ? Number(parent) : null,
+    car_type: distId ? carType : '',
+    distributor_id: distId ? Number(distId) : 0,
+  }
   return (
     <Modal open={!!item} onClose={onClose} title="Resolve raw brand"
       footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button disabled={mode === 'existing' ? !brandId : !name}
-        onClick={() => onSubmit(mode === 'existing' ? { brand_id: Number(brandId) } : { new_brand: { name, origin } })}>Resolve</Button></>}>
+        onClick={() => onSubmit(mode === 'existing' ? { brand_id: Number(brandId) } : { new_brand: newBrand })}>Resolve</Button></>}>
       <p className="mb-3 text-[12.5px] text-t1">Raw: <span dir="rtl" className="font-semibold text-t0">{item.raw_brand}</span> · {fmt(item.volume)} units</p>
       <div className="mb-3 flex gap-1">
         {(['existing', 'new'] as const).map((m) => (
@@ -301,7 +316,11 @@ function BrandResolveModal({ item, brands, onClose, onSubmit }: any) {
       {mode === 'existing'
         ? <Field label="Brand"><select className={field} value={brandId} onChange={(e) => setBrandId(e.target.value)}><option value="">—</option>{brands.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
         : <><Field label="Name"><input className={field} value={name} onChange={(e) => setName(e.target.value)} autoFocus /></Field>
-          <Field label="Origin"><select className={field} value={origin} onChange={(e) => setOrigin(e.target.value)}>{ORIGINS.map((o) => <option key={o}>{o}</option>)}</select></Field></>}
+          <Field label="Origin"><select className={field} value={origin} onChange={(e) => setOrigin(e.target.value)}>{ORIGINS.map((o) => <option key={o}>{o}</option>)}</select></Field>
+          <Field label="Parent brand (optional)"><select className={field} value={parent} onChange={(e) => setParent(e.target.value)}><option value="">—</option>{brands.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></Field>
+          <Field label="Distributor (optional)"><select className={field} value={distId} onChange={(e) => setDistId(e.target.value)}><option value="">— none</option>{distributors.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
+          {distId && <Field label="…for car type"><select className={field} value={carType} onChange={(e) => setCarType(e.target.value)}>{CAR_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>}
+          <p className="text-[11px] text-t2">Origin is brand-level; distributor is assigned per (brand, car type). Both are editable later from the Car tree.</p></>}
     </Modal>
   )
 }

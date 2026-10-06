@@ -100,12 +100,20 @@ func (s *Server) Handler() http.Handler {
 
 	// car tree (mutations)
 	mux.HandleFunc("POST /api/v1/brands", s.auth(s.createBrand))
+	mux.HandleFunc("GET /api/v1/brands/{id}", s.auth(s.brandDetail))
+	mux.HandleFunc("PATCH /api/v1/brands/{id}", s.auth(s.editBrand))
 	mux.HandleFunc("POST /api/v1/models", s.auth(s.createModel))
 	mux.HandleFunc("GET /api/v1/models/{id}", s.auth(s.modelDetail))
 	mux.HandleFunc("PATCH /api/v1/models/{id}", s.auth(s.editModel))
 	mux.HandleFunc("GET /api/v1/models/{id}/merge-preview", s.auth(s.mergePreview))
 	mux.HandleFunc("POST /api/v1/models/{id}/merge", s.auth(s.mergeModels))
 	mux.HandleFunc("DELETE /api/v1/aliases/{id}", s.auth(s.deleteAlias))
+	// distributor assignments are effective-dated on (brand, car_type) — managed
+	// here because until now they existed only in the seed.
+	mux.HandleFunc("POST /api/v1/distributors", s.auth(s.createDistributor))
+	mux.HandleFunc("GET /api/v1/brands/{id}/distributors", s.auth(s.brandAssignments))
+	mux.HandleFunc("POST /api/v1/brands/{id}/distributors", s.auth(s.setBrandAssignment))
+	mux.HandleFunc("DELETE /api/v1/distributor-assignments/{id}", s.auth(s.deleteBrandAssignment))
 
 	// imports
 	mux.HandleFunc("POST /api/v1/imports", s.auth(s.importUpload))
