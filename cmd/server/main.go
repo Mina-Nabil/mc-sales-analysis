@@ -57,8 +57,11 @@ func run(ctx context.Context, cmd string) error {
 		return cmdImport(ctx, false, "")
 	case "import-commit":
 		reason := ""
-		if len(os.Args) > 3 {
-			reason = os.Args[3]
+		for _, a := range os.Args[3:] {
+			if a != "--allow-private-plate" {
+				reason = a
+				break
+			}
 		}
 		return cmdImport(ctx, true, reason)
 	case "load-feeds":
@@ -155,9 +158,15 @@ func cmdMigrateFacts(ctx context.Context) error {
 
 func cmdImport(ctx context.Context, commit bool, reason string) error {
 	if len(os.Args) < 3 {
-		return fmt.Errorf("usage: server import <file.xlsx>   |   server import-commit <file.xlsx> [reason]")
+		return fmt.Errorf("usage: server import <file.xlsx> [--allow-private-plate]   |   server import-commit <file.xlsx> [reason] [--allow-private-plate]")
 	}
 	path := os.Args[2]
+	allowPrivate := false
+	for _, a := range os.Args[3:] {
+		if a == "--allow-private-plate" {
+			allowPrivate = true
+		}
+	}
 	pool, err := store.Connect(ctx, dbURL())
 	if err != nil {
 		return err
@@ -165,7 +174,7 @@ func cmdImport(ctx context.Context, commit bool, reason string) error {
 	defer pool.Close()
 
 	fmt.Println("detecting + parsing…")
-	pf, err := ingest.DetectAndParse(path)
+	pf, err := ingest.DetectAndParseWithOptions(path, ingest.ParseOptions{AllowPrivatePlate: allowPrivate})
 	if err != nil {
 		return err
 	}
@@ -201,6 +210,10 @@ func printDryRun(r *ingest.DryRunReport) {
 	total := r.CarRows
 	fmt.Printf("\n=== dry-run report ===\n")
 	fmt.Printf("  signature   %s (%s)\n", pf.Signature, pf.Role)
+	if pf.PrivatePlate {
+		fmt.Printf("  ⚠ PRIVATE PLATES ONLY (الملاكي) — this sheet is not the whole market; the\n" +
+			"    month will NOT be comparable with the all-vehicles months already loaded.\n")
+	}
 	fmt.Printf("  period      %04d-%02d\n", pf.Year, pf.Month)
 	fmt.Printf("  parsed      %d rows / %d units\n", len(pf.Rows), pf.TotalVolume)
 	if r.ExcludeMotorcycles {

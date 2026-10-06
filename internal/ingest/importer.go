@@ -33,7 +33,27 @@ type ParsedFeed struct {
 	// ModelYears lists the year columns the sheet carried, in sheet order.
 	// Empty for the by-status feed, which has no manufacture year at all.
 	ModelYears []int
+	// PrivatePlate marks the الملاكي variant of the report, which covers only
+	// private plates (~a third of the market). Parsing it at all requires
+	// ParseOptions.AllowPrivatePlate; the flag then travels with the feed so
+	// the dry run, the UI and the batch row all say the month is partial.
+	PrivatePlate bool
 }
+
+// ParseOptions carries the caller's choices for DetectAndParseWithOptions.
+type ParseOptions struct {
+	// Year and Month, when both non-zero, replace the period detected from the
+	// sheet title.
+	Year, Month int
+	// AllowPrivatePlate accepts the الملاكي report instead of refusing it. It
+	// is deliberately opt-in per import: the sheet is NOT the full market, so a
+	// month loaded from it is not comparable with the all-vehicles months.
+	AllowPrivatePlate bool
+}
+
+// PrivatePlateNote is prefixed to the batch's revision_reason when the month
+// was loaded from the الملاكي report, so the partial coverage is on the record.
+const PrivatePlateNote = "[PRIVATE PLATES ONLY — الملاكي report, not full market coverage]"
 
 var periodRe = regexp.MustCompile(`من\s*(\d{4})/(\d{1,2})/(\d{1,2})`)
 
@@ -44,7 +64,7 @@ var periodRe = regexp.MustCompile(`من\s*(\d{4})/(\d{1,2})/(\d{1,2})`)
 // the manufacture year) and brands_models_by_status. Anything else returns a
 // clear "unsupported" error rather than mis-parsing (§4.1).
 func DetectAndParse(path string) (*ParsedFeed, error) {
-	return DetectAndParseWithPeriod(path, 0, 0)
+	return DetectAndParseWithOptions(path, ParseOptions{})
 }
 
 // DetectAndParseWithPeriod is DetectAndParse with an explicit period override:
@@ -54,6 +74,13 @@ func DetectAndParse(path string) (*ParsedFeed, error) {
 // title cell. When no override is given and the title carries no detectable
 // period, it errors as before.
 func DetectAndParseWithPeriod(path string, yearOverride, monthOverride int) (*ParsedFeed, error) {
+	return DetectAndParseWithOptions(path, ParseOptions{Year: yearOverride, Month: monthOverride})
+}
+
+// DetectAndParseWithOptions is the full form: period override plus the
+// opt-in that accepts the private-plate (الملاكي) variant.
+func DetectAndParseWithOptions(path string, opts ParseOptions) (*ParsedFeed, error) {
+	yearOverride, monthOverride := opts.Year, opts.Month
 	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", path, err)
@@ -76,11 +103,12 @@ func DetectAndParseWithPeriod(path string, yearOverride, monthOverride int) (*Pa
 	// is an exact decomposition of the by-status feed's Zero column and carries
 	// the manufacture year — but a month delivered only in the older shape still
 	// imports, with model_year left NULL.
+	privatePlate := isPrivatePlateReport(title)
 	var parse func(*ParsedFeed, [][]string) error
 	switch {
 	case isModelYearFeed(header, sub):
-		if err := rejectPrivatePlateVariant(title); err != nil {
-			return nil, err
+		if privatePlate && !opts.AllowPrivatePlate {
+			return nil, errPrivatePlate
 		}
 		parse = parseByModelYear
 	case isPrimaryStatusFeed(header, sub):
@@ -99,7 +127,7 @@ func DetectAndParseWithPeriod(path string, yearOverride, monthOverride int) (*Pa
 		return nil, fmt.Errorf("invalid period %04d-%02d", yr, mo)
 	}
 
-	pf := &ParsedFeed{Path: path, Role: "primary", Year: yr, Month: mo}
+	pf := &ParsedFeed{Path: path, Role: "primary", Year: yr, Month: mo, PrivatePlate: privatePlate}
 	if err := parse(pf, rows); err != nil {
 		return nil, err
 	}
@@ -240,15 +268,25 @@ func isModelYearFeed(header, sub []string) bool {
 	return false
 }
 
-// rejectPrivatePlateVariant refuses the look-alike that ships in the same
-// archive: تقرير … المركبات الملاكي … is private plates only and has an
-// identical header signature, but roughly a third of the units (Jul-2026:
-// 22,378 vs 63,219). Matching on the NORMALIZED title matters — these sheets
-// carry tatweel elongation throughout, so a raw substring test is unreliable.
+// isPrivatePlateReport spots the look-alike that ships in the same archive:
+// تقرير … المركبات الملاكي … is private plates only and has an identical header
+// signature, but roughly a third of the units (Jul-2026: 22,378 vs 63,219).
+// Matching on the NORMALIZED title matters — these sheets carry tatweel
+// elongation throughout, so a raw substring test is unreliable.
+func isPrivatePlateReport(title string) bool {
+	return strings.Contains(domain.Normalize(title), domain.Normalize("المركبات الملاكي"))
+}
+
+// errPrivatePlate is what an unflagged private-plate upload gets. It stays the
+// default: loading it silently would under-count the month by ~two thirds.
+var errPrivatePlate = fmt.Errorf("this is the private-plate (الملاكي) report, which covers only part of the market — " +
+	"upload the all-vehicles report (تقرير بماركات وطرازات المركبات المرخصة لأول مرة) instead, " +
+	"or tick “private-plate report” / pass --allow-private-plate to load it as a partial-coverage month")
+
+// rejectPrivatePlateVariant is the default-path guard kept as a named check.
 func rejectPrivatePlateVariant(title string) error {
-	if strings.Contains(domain.Normalize(title), domain.Normalize("المركبات الملاكي")) {
-		return fmt.Errorf("this is the private-plate (الملاكي) report, which covers only part of the market — " +
-			"upload the all-vehicles report (تقرير بماركات وطرازات المركبات المرخصة لأول مرة) instead")
+	if isPrivatePlateReport(title) {
+		return errPrivatePlate
 	}
 	return nil
 }
@@ -396,6 +434,10 @@ type CommitResult struct {
 // batch already exists for the period, it is superseded (§4.4).
 func Commit(ctx context.Context, pool *pgxpool.Pool, pf *ParsedFeed, reason string) (CommitResult, error) {
 	var out CommitResult
+	// A partial-coverage month must say so permanently, not just in the dry run.
+	if pf.PrivatePlate {
+		reason = strings.TrimSpace(PrivatePlateNote + " " + reason)
+	}
 	res, err := loadResolver(ctx, pool)
 	if err != nil {
 		return out, err

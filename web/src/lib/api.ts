@@ -97,17 +97,27 @@ export const api = {
   resolveBrand: (body: any) => req('POST', '/review/brands/resolve', body),
 
   imports: () => req('GET', '/imports'),
-  upload: (file: File, year?: number, month?: number) => {
+  // allowPrivate opts into the الملاكي (private-plate) report. Every call in
+  // the chain re-parses the stored file, so the flag has to be repeated.
+  upload: (file: File, year?: number, month?: number, allowPrivate?: boolean) => {
     const fd = new FormData()
     fd.append('file', file)
     if (year && month) { fd.append('period_year', String(year)); fd.append('period_month', String(month)) }
+    if (allowPrivate) fd.append('allow_private_plate', '1')
     return req('POST', '/imports', fd)
   },
-  dryRun: (token: string, year?: number, month?: number) =>
-    req('GET', `/imports/${token}/dry-run` + (year && month ? `?year=${year}&month=${month}` : '')),
+  dryRun: (token: string, year?: number, month?: number, allowPrivate?: boolean) => {
+    const p = new URLSearchParams()
+    if (year && month) { p.set('year', String(year)); p.set('month', String(month)) }
+    if (allowPrivate) p.set('allow_private_plate', '1')
+    const qs = p.toString()
+    return req('GET', `/imports/${token}/dry-run` + (qs ? `?${qs}` : ''))
+  },
   importRows: (token: string, qs: string) => req('GET', `/imports/${token}/rows?${qs}`),
-  commit: (token: string, reason: string, year?: number, month?: number) =>
-    req('POST', `/imports/${token}/commit`, { reason, period_year: year, period_month: month }),
+  commit: (token: string, reason: string, year?: number, month?: number, allowPrivate?: boolean) =>
+    req('POST', `/imports/${token}/commit`, {
+      reason, period_year: year, period_month: month, allow_private_plate: !!allowPrivate,
+    }),
 
   periods: () => req('GET', '/periods'),
   deletePeriods: (periods: { year: number; month: number }[]) =>

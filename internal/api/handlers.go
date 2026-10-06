@@ -389,27 +389,32 @@ func (s *Server) importUpload(w http.ResponseWriter, r *http.Request) {
 	out.Close()
 
 	yr, mo := periodOverride(r.FormValue("period_year"), r.FormValue("period_month"))
-	pf, err := ingest.DetectAndParseWithPeriod(dst, yr, mo)
+	pf, err := ingest.DetectAndParseWithOptions(dst, ingest.ParseOptions{
+		Year: yr, Month: mo, AllowPrivatePlate: formBool(r.FormValue("allow_private_plate")),
+	})
 	if err != nil {
 		_ = os.Remove(dst)
 		httpErr(w, http.StatusUnprocessableEntity, err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"upload_id":    token,
-		"filename":     hdr.Filename,
-		"signature":    pf.Signature,
-		"role":         pf.Role,
-		"period_year":  pf.Year,
-		"period_month": pf.Month,
-		"rows":         len(pf.Rows),
-		"volume":       pf.TotalVolume,
+		"upload_id":     token,
+		"filename":      hdr.Filename,
+		"signature":     pf.Signature,
+		"role":          pf.Role,
+		"period_year":   pf.Year,
+		"period_month":  pf.Month,
+		"rows":          len(pf.Rows),
+		"volume":        pf.TotalVolume,
+		"private_plate": pf.PrivatePlate,
 	})
 }
 
 func (s *Server) importDryRun(w http.ResponseWriter, r *http.Request) {
 	yr, mo := periodOverride(r.URL.Query().Get("year"), r.URL.Query().Get("month"))
-	pf, ok := s.loadUpload(w, r, yr, mo)
+	pf, ok := s.loadUpload(w, r, ingest.ParseOptions{
+		Year: yr, Month: mo, AllowPrivatePlate: formBool(r.URL.Query().Get("allow_private_plate")),
+	})
 	if !ok {
 		return
 	}
@@ -423,12 +428,15 @@ func (s *Server) importDryRun(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) importCommit(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Reason string `json:"reason"`
-		Year   int    `json:"period_year"`
-		Month  int    `json:"period_month"`
+		Reason            string `json:"reason"`
+		Year              int    `json:"period_year"`
+		Month             int    `json:"period_month"`
+		AllowPrivatePlate bool   `json:"allow_private_plate"`
 	}
 	_ = readJSON(r, &req)
-	pf, ok := s.loadUpload(w, r, req.Year, req.Month)
+	pf, ok := s.loadUpload(w, r, ingest.ParseOptions{
+		Year: req.Year, Month: req.Month, AllowPrivatePlate: req.AllowPrivatePlate,
+	})
 	if !ok {
 		return
 	}
@@ -447,7 +455,9 @@ func (s *Server) importCommit(w http.ResponseWriter, r *http.Request) {
 func (s *Server) importRows(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	yr, mo := periodOverride(q.Get("year"), q.Get("month"))
-	pf, ok := s.loadUpload(w, r, yr, mo)
+	pf, ok := s.loadUpload(w, r, ingest.ParseOptions{
+		Year: yr, Month: mo, AllowPrivatePlate: formBool(q.Get("allow_private_plate")),
+	})
 	if !ok {
 		return
 	}
@@ -538,9 +548,11 @@ func (s *Server) importList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// loadUpload re-parses a previously uploaded file by its token. When yr/mo are
-// non-zero they override the period detected from the file title (§4.1).
-func (s *Server) loadUpload(w http.ResponseWriter, r *http.Request, yr, mo int) (*ingest.ParsedFeed, bool) {
+// loadUpload re-parses a previously uploaded file by its token. The options
+// carry the period override (§4.1) and the private-plate opt-in; every request
+// in the upload → dry-run → commit chain must repeat them, since each one
+// re-parses the stored file from scratch.
+func (s *Server) loadUpload(w http.ResponseWriter, r *http.Request, opts ingest.ParseOptions) (*ingest.ParsedFeed, bool) {
 	token := r.PathValue("id")
 	if !safeToken(token) {
 		httpErr(w, http.StatusBadRequest, "bad upload id")
@@ -551,12 +563,21 @@ func (s *Server) loadUpload(w http.ResponseWriter, r *http.Request, yr, mo int) 
 		httpErr(w, http.StatusNotFound, "upload not found (re-upload the file)")
 		return nil, false
 	}
-	pf, err := ingest.DetectAndParseWithPeriod(path, yr, mo)
+	pf, err := ingest.DetectAndParseWithOptions(path, opts)
 	if err != nil {
 		httpErr(w, http.StatusUnprocessableEntity, err.Error())
 		return nil, false
 	}
 	return pf, true
+}
+
+// formBool reads a checkbox-ish request value ("1", "true", "on", "yes").
+func formBool(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "on", "yes":
+		return true
+	}
+	return false
 }
 
 // periodOverride parses year/month request values, returning (0,0) when either
@@ -586,6 +607,7 @@ func dryRunDTO(rep *ingest.DryRunReport) map[string]any {
 	}
 	return map[string]any{
 		"signature":            rep.Feed.Signature,
+		"private_plate":        rep.Feed.PrivatePlate,
 		"period_year":          rep.Feed.Year,
 		"period_month":         rep.Feed.Month,
 		"parsed_rows":          len(rep.Feed.Rows),

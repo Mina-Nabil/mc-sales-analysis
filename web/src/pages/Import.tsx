@@ -27,6 +27,8 @@ export default function Import() {
   const [year, setYear] = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [fromName, setFromName] = useState(false)
+  // Opt-in for the الملاكي report (private plates only, ~a third of the market).
+  const [allowPrivate, setAllowPrivate] = useState(false)
   const nameDerived = pending ? deriveFromName(pending.name) : null
 
   const loadBatches = () => api.imports().then(setBatches).catch(() => {})
@@ -40,6 +42,7 @@ export default function Import() {
     const d = deriveFromName(file.name)
     if (d) { setYear(d.year); setMonth(d.month); setFromName(true) }
     else { setFromName(false) }
+    setAllowPrivate(/ملاكي|الملاكى/.test(file.name))
     setPending(file)
   }
 
@@ -52,9 +55,9 @@ export default function Import() {
     setPending(null)
     setBusy(true); setMsg(''); setReport(null); setUpload(null)
     try {
-      const up = await api.upload(file, yr, mo)
+      const up = await api.upload(file, yr, mo, allowPrivate)
       setUpload(up)
-      setReport(await api.dryRun(up.upload_id, yr, mo))
+      setReport(await api.dryRun(up.upload_id, yr, mo, allowPrivate))
     } catch (err: any) { setMsg('⚠ ' + err.message) } finally { setBusy(false) }
   }
 
@@ -62,7 +65,7 @@ export default function Import() {
     if (!upload) return
     setBusy(true); setMsg('')
     try {
-      const r = await api.commit(upload.upload_id, reason, year, month)
+      const r = await api.commit(upload.upload_id, reason, year, month, allowPrivate)
       setMsg(`${r.revised ? 'Revised' : 'Committed'} batch #${r.batch_id}: ${fmt(r.car_volume)} car units (${fmt(r.dropped_moto_volume)} motorcycle units dropped).`)
       setReport(null); setUpload(null); setReason(''); loadBatches()
     } catch (err: any) { setMsg('⚠ ' + err.message) } finally { setBusy(false) }
@@ -117,6 +120,18 @@ export default function Import() {
                 : <span className="font-semibold text-bad"> Could not find a date in “{pending?.name}”.</span>)}
             </p>
           </div>
+          <div className="border-t border-line pt-3">
+            <Checkbox
+              checked={allowPrivate}
+              onChange={(e) => setAllowPrivate(e.target.checked)}
+              label="This is the private-plate (الملاكي) report — import it anyway"
+            />
+            <p className="mt-1.5 pl-6 text-[11.5px] text-t2">
+              That sheet covers private plates only — roughly a third of the market — so the month will not be
+              comparable with the all-vehicles months. The batch is stamped as partial coverage. Leave this off
+              unless you know the full report is unavailable.
+            </p>
+          </div>
         </div>
       </Modal>
 
@@ -126,6 +141,13 @@ export default function Import() {
             <CardTitle>Dry run — {report.period_year}-{String(report.period_month).padStart(2, '0')}</CardTitle>
             {report.existing_batch && <Badge variant="warning">Will revise existing batch</Badge>}
           </CardHeader>
+          {report.private_plate && (
+            <div className="mb-4 rounded-[var(--radius-vela-md)] border border-bad/40 bg-bad/10 px-3.5 py-2.5 text-[13px] text-bad">
+              <span className="font-bold">Private plates only (الملاكي).</span> This feed is not the whole market —
+              taxis, buses, trucks and government plates are missing, so these totals are roughly a third of a normal
+              month and will not compare against the other periods. The batch records the partial coverage.
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <KV label="Parsed" value={`${fmt(report.parsed_rows)} rows`} sub={`${fmt(report.parsed_volume)} units`} />
             <KV label="Motorcycles dropped" value={fmt(report.dropped_moto_rows)} sub={`${fmt(report.dropped_moto_volume)} units`} />
@@ -173,9 +195,10 @@ export default function Import() {
 
           <div className="mt-4 grid grid-cols-1 gap-3 text-[13px] sm:grid-cols-3">
             <Meta label="File" value={upload?.filename || '—'} />
-            <Meta label="Feed" value={report.signature === 'brands_models_by_year'
-              ? 'All vehicles, by model year' : report.signature === 'brands_models_by_status'
-              ? 'All vehicles, by status (no model year)' : (report.signature || '—')} />
+            <Meta label="Feed" value={(report.private_plate ? 'Private plates only — ' : '') + (
+              report.signature === 'brands_models_by_year' ? 'by model year'
+                : report.signature === 'brands_models_by_status' ? 'by status (no model year)'
+                  : (report.signature || '—'))} />
             <Meta label="Period" value={`${report.period_year}-${String(report.period_month).padStart(2, '0')}`} />
           </div>
           {report.new_brands?.length > 0 && (
@@ -206,7 +229,7 @@ export default function Import() {
         </Card>
       )}
 
-      {report && upload && <RowsTable token={upload.upload_id} year={year} month={month} />}
+      {report && upload && <RowsTable token={upload.upload_id} year={year} month={month} allowPrivate={allowPrivate} />}
 
       {!report && <DeletePeriods onDone={loadBatches} />}
 
@@ -273,7 +296,7 @@ const STATUS_STYLE: Record<string, string> = {
   motorcycle: 'text-t2',
 }
 
-function RowsTable({ token, year, month }: { token: string; year: number; month: number }) {
+function RowsTable({ token, year, month, allowPrivate }: { token: string; year: number; month: number; allowPrivate: boolean }) {
   const [data, setData] = useState<any>(null)
   const [offset, setOffset] = useState(0)
   const [status, setStatus] = useState('all')
@@ -286,11 +309,12 @@ function RowsTable({ token, year, month }: { token: string; year: number; month:
 
   useEffect(() => {
     const p = new URLSearchParams({ offset: String(offset), limit: String(limit), status, year: String(year), month: String(month) })
+    if (allowPrivate) p.set('allow_private_plate', '1')
     if (term) p.set('q', term)
     let alive = true
     api.importRows(token, p.toString()).then((d) => { if (alive) setData(d) }).catch(() => { if (alive) setData({ rows: [], total: 0, counts: {} }) })
     return () => { alive = false }
-  }, [token, offset, status, term, year, month])
+  }, [token, offset, status, term, year, month, allowPrivate])
 
   const rows: any[] = data?.rows || []
   // Merge repeated governorate / unit / brand cells within this page.

@@ -143,3 +143,26 @@ func TestFeedsReconcileExactly(t *testing.T) {
 		}
 	}
 }
+
+// The opt-in parses the private-plate sheet instead of refusing it, and marks
+// the feed so the dry run, the UI and the batch all record the partial
+// coverage. Default (no opt-in) must still refuse.
+func TestAllowPrivatePlateOptIn(t *testing.T) {
+	path := os.Getenv("PRIVATE_PLATE_XLSX")
+	if path == "" {
+		t.Skip("set PRIVATE_PLATE_XLSX to a الملاكي report to run this")
+	}
+	if _, err := DetectAndParse(path); err == nil {
+		t.Fatal("private-plate report parsed without the opt-in")
+	}
+	pf, err := DetectAndParseWithOptions(path, ParseOptions{AllowPrivatePlate: true})
+	if err != nil {
+		t.Fatalf("opt-in parse: %v", err)
+	}
+	if !pf.PrivatePlate {
+		t.Error("PrivatePlate not set on a الملاكي feed")
+	}
+	if len(pf.Rows) == 0 || pf.TotalVolume == 0 {
+		t.Errorf("parsed nothing: %d rows / %d units", len(pf.Rows), pf.TotalVolume)
+	}
+}

@@ -96,9 +96,20 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
   those carry volume 0.
 - **Decoy guard:** every archive also holds <span dir="rtl">تقرير … المركبات
   الملاكي …</span> — private plates only, *identical* header signature, ~35% of
-  the units (Jul-2026: 22,378 vs 63,219). `rejectPrivatePlateVariant` matches the
+  the gross units (Jul-2026: 22,378 vs 63,219). `isPrivatePlateReport` matches the
   **normalized** title (these sheets carry tatweel throughout, so a raw substring
-  test is unreliable).
+  test is unreliable). Most of that gross gap is motorcycles, which §0.1 drops
+  anyway; against *car* units the shortfall is ~20% (the taxi/commercial/transport
+  plate classes), which is the number that matters.
+- **Private-plate opt-in:** refusing it stays the default, but
+  `ParseOptions.AllowPrivatePlate` loads it as an explicitly partial month —
+  `server import <f> --allow-private-plate`, or the Import page's
+  "This is the private-plate (الملاكي) report" checkbox, which must be repeated on
+  upload / dry-run / rows / commit since each request re-parses the stored file.
+  `ParsedFeed.PrivatePlate` then travels with the feed: the dry run warns in red,
+  and `Commit` prefixes `ingest.PrivatePlateNote` onto the batch's
+  `revision_reason` so the partial coverage is permanently on the record. Such a
+  month is **not comparable** with the all-vehicles months in any trend or YoY.
 - **Residual guard:** if a row's year cells do not sum to its own grand total,
   the difference is emitted as one `model_year = NULL` fact, so the period still
   reconciles exactly (§8.1) instead of silently losing units. Never observed in
@@ -193,10 +204,51 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
   `MergePreview` powers the pre-merge impact dialog (§6.3).
 - `CreateModelForReview` closes a "new model" queue item: create the model +
   confirm the alias + re-derive its facts, in one call.
+- `EditBrand` edits the brand's own record (name/origin/notes/parent). It did not
+  exist before: `brands.origin` was write-once at creation, editable only by SQL.
+  Guards self-parent and, via `WITH RECURSIVE`, a parent cycle (the self-FK has no
+  schema-level guard); a duplicate name becomes "another brand is already named X".
+- **`EditBrand` and `EditModel` REPLACE every attribute** — `""` clears the column
+  to NULL. `EditModel` used `COALESCE(NULLIF($n,''), col)`, so a wrongly-set
+  `car_type`/`engine_type`/`supply` could never be reset through the API at all.
+  Both editors are full forms that always submit complete state; `name` keeps its
+  non-empty guard.
+- **Distributor management** (`internal/tree/distributor.go`) — `distributor_assignments`
+  was **seed-only**, so a brand created in the app could never get a distributor.
+  `CreateDistributor` / `BrandAssignments` / `SetAssignment` / `DeleteAssignment`
+  now manage the existing tables; no schema change, and **the analytics SQL is
+  untouched** — the (brand, car_type) LATERAL already resolves whatever is there.
+  `SetAssignment` works *with* the GIST EXCLUDE on overlapping ranges rather than
+  against it: same `valid_from` → UPDATE in place (a correction); otherwise close
+  the open-ended range at the new `valid_from`, then INSERT ("changed hands on
+  this date"). A surviving 23P01 becomes a readable message.
+  `valid_from` defaults to `FirstFactMonth` so a first assignment covers existing
+  history instead of only the future. Deleting an assignment is legitimate —
+  distributor is absence of a row, never a sentinel (§2.4).
+  `CreateDistributor` deliberately skips `applyCasing`: §0.1 governs brand/model
+  names, not company names ("GB Auto", "MTI").
 - Every mutation writes `change_log` (actor_kind='human', units in volume_impact).
+- **Fixed: `logChange` wrote `actor_id` verbatim**, so an actorID of 0 (any CLI or
+  test call, where no user is signed in) violated the `users` FK. `CreateBrand`/
+  `CreateModel` swallow the log error, so those calls silently wrote *no* audit
+  row at all; `EditModel` returns it, so it failed outright. `actor()` now maps 0
+  → NULL, which is what every other non-HTTP path in the codebase already does.
 - SPA: Review page has Models/New-brands tabs with new-model + brand-resolve
   modals; Tree page has New brand/New model buttons, an inline model editor,
   merge dialog, and alias detach. Split is still not built.
+- **Selecting a brand with no model opens the brand form** in the Tree's third
+  column (it used to be dead space): name/origin/parent/notes plus the
+  distributor-assignment table and an add/change row with inline
+  "＋ new distributor". Origin and distributor are **not** model columns, so the
+  model forms (Tree's editor + both New-model modals) carry a shared
+  `BrandInherited` block (`web/src/components/BrandInherited.tsx`) that shows the
+  inherited values and writes through to the brand / the (brand, car_type)
+  assignment, stating out loud that the save hits every sibling model.
+  `CAR_TYPES/ENGINES/SUPPLIES/ORIGINS/field` were duplicated verbatim in Tree.tsx
+  and Review.tsx — now `web/src/lib/vocab.ts`.
+- **No "propagate to facts" action, by design.** Nothing derived is stored on a
+  fact (§2.5), so a brand or model edit is already visible across all history the
+  moment it commits — there is nothing to push down.
 
 ## HTTP API + auth (`internal/api/`, `internal/auth/`, TECH §7 / §11.5)
 
@@ -209,6 +261,14 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
   TLS. No roles — every mutation is attributed in `change_log`.
 - `seed-admin` reads `ADMIN_EMAIL`/`ADMIN_PASSWORD`; refuses to run if other
   users exist unless `--force` (idempotent update of the same admin).
+- Tree mutations beyond the originals: `GET|PATCH /brands/{id}`,
+  `POST /distributors`, `GET|POST /brands/{id}/distributors`,
+  `DELETE /distributor-assignments/{id}`. `POST /brands` and
+  `POST /review/brands/resolve` also accept an optional first assignment
+  (`car_type` + `distributor_id`); if the brand is created but the assignment
+  fails, the response carries `distributor_error` rather than losing the brand.
+  Remember `readJSON` sets `DisallowUnknownFields()` — a new frontend payload
+  field without its Go counterpart is a 400, so they must land together.
 - Imports over HTTP: `POST /imports` (multipart) saves the file under
   `$UPLOAD_DIR` (default `./uploads`, git-ignored) keyed by a random token, then
   `GET /imports/{token}/dry-run` and `POST /imports/{token}/commit` re-parse it.
