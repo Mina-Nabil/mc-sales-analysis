@@ -304,10 +304,16 @@ type BrandQueueItem struct {
 }
 
 // BrandQueue lists raw brand strings that resolve to no brand, volume-ranked.
+//
+// Excluded facts are left out (the same predicate analytics uses), so a raw brand
+// a reviewer marked out of scope drops off the queue. If a later import brings
+// NEW unresolved volume under the same raw string it reappears — that volume has
+// not been ruled on, and silently rejecting it would hide units that §0.1
+// requires to be counted and reported.
 func BrandQueue(ctx context.Context, pool *pgxpool.Pool, limit int) ([]BrandQueueItem, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT raw_brand, COALESCE(sum(volume),0), count(*)
-		  FROM facts WHERE brand_id IS NULL
+		  FROM facts WHERE brand_id IS NULL AND status <> 'rejected'
 		 GROUP BY raw_brand ORDER BY sum(volume) DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
@@ -348,6 +354,68 @@ func ResolveBrand(ctx context.Context, pool *pgxpool.Pool, rawBrand string, bran
 		return 0, err
 	}
 	if err := logChangeTx(ctx, tx, "brand_alias", brandID, "resolve_brand", actorID, units); err != nil {
+		return 0, err
+	}
+	return units, tx.Commit(ctx)
+}
+
+// ExcludeBrand marks a raw brand's unresolved volume out of scope — the brand-queue
+// twin of review.Exclude ("not needed") on the model queue.
+//
+// Nothing is deleted (§8.1): the facts keep their raw identity and volume and are
+// only moved to status='rejected', which analytics filters out via notExcluded, so
+// the units leave every share/growth/rank figure while period totals still
+// reconcile against the authority (§0.1 "counted & reported").
+//
+// A brand_alias is written as the permanent record of the decision. brand_id stays
+// NULL and the resolver only ever loads aliases WHERE brand_id IS NOT NULL, so the
+// row is inert for resolution — it exists for the audit trail and as the negative
+// example a later AI tier can learn from (§4.5).
+func ExcludeBrand(ctx context.Context, pool *pgxpool.Pool, rawBrand, reason string, actorID int64) (int, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
+	var units int
+	if err := tx.QueryRow(ctx, `
+		SELECT COALESCE(sum(volume),0) FROM facts
+		 WHERE raw_brand=$1 AND brand_id IS NULL AND status <> 'rejected'`, rawBrand).Scan(&units); err != nil {
+		return 0, err
+	}
+	ct, err := tx.Exec(ctx, `
+		UPDATE facts SET status='rejected'
+		 WHERE raw_brand=$1 AND brand_id IS NULL AND status <> 'rejected'`, rawBrand)
+	if err != nil {
+		return 0, err
+	}
+	if ct.RowsAffected() == 0 {
+		return 0, fmt.Errorf("nothing left to exclude for %q — refresh the queue", rawBrand)
+	}
+
+	note := "excluded by reviewer — volume out of scope"
+	if strings.TrimSpace(reason) != "" {
+		note = "excluded by reviewer — " + strings.TrimSpace(reason)
+	}
+	// Never clobber a resolving alias: only an unresolved one becomes the record.
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO brand_aliases (raw, raw_normalized, raw_normalized_nospace, brand_id,
+		                           status, method, reasoning, decided_by, decided_at)
+		VALUES ($1,$2,$3,NULL,'rejected','human',$4,$5,now())
+		ON CONFLICT (raw) DO UPDATE
+		   SET status='rejected', method='human', reasoning=EXCLUDED.reasoning,
+		       decided_by=EXCLUDED.decided_by, decided_at=now()
+		 WHERE brand_aliases.brand_id IS NULL`,
+		rawBrand, domain.Normalize(rawBrand), domain.NormalizeNoSpace(rawBrand),
+		note, actor(actorID)); err != nil {
+		return 0, err
+	}
+	// Read the id back rather than RETURNING it: the ON CONFLICT carries a WHERE,
+	// so a conflicting row that already resolves to a brand yields no returned row.
+	var aliasID int64
+	_ = tx.QueryRow(ctx, `SELECT id FROM brand_aliases WHERE raw=$1`, rawBrand).Scan(&aliasID)
+	if err := logChangeTx(ctx, tx, "brand_alias", aliasID, "exclude_brand", actorID, units); err != nil {
 		return 0, err
 	}
 	return units, tx.Commit(ctx)

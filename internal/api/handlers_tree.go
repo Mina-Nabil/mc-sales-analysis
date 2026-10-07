@@ -261,6 +261,25 @@ func (s *Server) resolveBrand(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// excludeBrand is the brand-queue twin of reviewExclude: the raw brand's
+// unresolved volume is marked out of scope, never deleted.
+func (s *Server) excludeBrand(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RawBrand string `json:"raw_brand"`
+		Reason   string `json:"reason"`
+	}
+	if err := readJSON(r, &req); err != nil || req.RawBrand == "" {
+		httpErr(w, http.StatusBadRequest, "raw_brand required")
+		return
+	}
+	units, err := tree.ExcludeBrand(r.Context(), s.pool, req.RawBrand, req.Reason, s.user(r).ID)
+	if err != nil {
+		httpErr(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"excluded_volume": units})
+}
+
 func (s *Server) reviewNewModel(w http.ResponseWriter, r *http.Request) {
 	id, err := pathInt(r, "id")
 	if err != nil {

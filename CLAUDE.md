@@ -191,6 +191,20 @@ DB is Postgres 16 on host port **5433**; `DATABASE_URL` defaults to it.
   (`tree.BrandQueue`) and resolved via `tree.ResolveBrand` (create/assign a brand
   → alias raw→brand → set brand_id on facts, which then flow to the model queue).
   Tier-4 AI still pending.
+- **`tree.ExcludeBrand` is the brand-queue twin of `review.Exclude`** ("Not needed"):
+  facts → `status='rejected'`, nothing deleted, so the units leave every measure but
+  period totals still reconcile (§0.1, §8.1). `BrandQueue` gained
+  `AND status <> 'rejected'` so the row drops off — without it an exclusion would
+  have been invisible. A `brand_aliases` row records the decision with
+  `brand_id` NULL; the resolver only loads aliases `WHERE brand_id IS NOT NULL`, so
+  it is inert for resolution and serves the audit trail / a later AI tier (§4.5).
+  **New volume under the same raw string reappears in the queue** — it has not been
+  ruled on, and auto-rejecting it would hide units §0.1 requires to be counted.
+- The Models tab has a **brand filter**. Everything keyboard-driven indexes the
+  *filtered* list, not `items` — otherwise J/K would walk through hidden rows and
+  Enter would decide on the wrong one. The cursor resets when the filter shortens
+  the list past it. Note the header's fuzzy-pass and bulk-confirm act on the whole
+  queue server-side; the filter does not scope them.
 
 ## Tree editing + node creation (`internal/tree/`, TECH §6.3, §4.2)
 

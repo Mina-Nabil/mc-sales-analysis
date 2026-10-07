@@ -95,6 +95,8 @@ export const api = {
 
   brandQueue: (limit = 100) => req('GET', `/review/brands?limit=${limit}`),
   resolveBrand: (body: any) => req('POST', '/review/brands/resolve', body),
+  excludeBrand: (rawBrand: string, reason = '') =>
+    req('POST', '/review/brands/exclude', { raw_brand: rawBrand, reason }),
 
   imports: () => req('GET', '/imports'),
   // allowPrivate opts into the الملاكي (private-plate) report. Every call in

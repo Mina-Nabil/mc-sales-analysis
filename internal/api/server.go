@@ -90,6 +90,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/resolve", s.auth(s.resolve))
 	mux.HandleFunc("GET /api/v1/review/brands", s.auth(s.brandQueue))
 	mux.HandleFunc("POST /api/v1/review/brands/resolve", s.auth(s.resolveBrand))
+	mux.HandleFunc("POST /api/v1/review/brands/exclude", s.auth(s.excludeBrand))
 
 	// car tree (read)
 	mux.HandleFunc("GET /api/v1/brands", s.auth(s.brands))

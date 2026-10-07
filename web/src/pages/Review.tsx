@@ -20,6 +20,7 @@ export default function Review() {
   const [resolveFor, setResolveFor] = useState<any>(null)
   const [mergeFor, setMergeFor] = useState<any>(null)
   const [excludeFor, setExcludeFor] = useState<any>(null)
+  const [excludeBrandFor, setExcludeBrandFor] = useState<any>(null)
   const rowsRef = useRef<(HTMLTableRowElement | null)[]>([])
 
   const load = useCallback(async () => {
@@ -65,10 +66,13 @@ export default function Review() {
   const reject = (it: any) => it && act(() => api.reject(it.alias_id), 'Marked wrong — volume returned to unresolved.')
   const exclude = (it: any, reason: string) =>
     act(() => api.exclude(it.alias_id, reason), (r) => `Excluded ${fmt(r.excluded_volume)} units — kept on record, out of the measures.`)
+  const excludeBrand = (it: any, reason: string) =>
+    act(() => api.excludeBrand(it.raw_brand, reason),
+      (r) => `Excluded ${fmt(r.excluded_volume)} units — kept on record, out of the measures.`)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT' || newModelFor || resolveFor || mergeFor || excludeFor || tab !== 'models') return
+      if ((e.target as HTMLElement).tagName === 'INPUT' || newModelFor || resolveFor || mergeFor || excludeFor || excludeBrandFor || tab !== 'models') return
       if (e.key === 'j') setSel((s) => Math.min(s + 1, shown.length - 1))
       else if (e.key === 'k') setSel((s) => Math.max(s - 1, 0))
       else if (e.key === 'Enter') confirm(shown[sel])
@@ -79,7 +83,7 @@ export default function Review() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items, q, sel, newModelFor, resolveFor, mergeFor, excludeFor, tab]) // eslint-disable-line
+  }, [items, q, sel, newModelFor, resolveFor, mergeFor, excludeFor, excludeBrandFor, tab]) // eslint-disable-line
   useEffect(() => { rowsRef.current[sel]?.scrollIntoView({ block: 'nearest' }) }, [sel])
 
   return (
@@ -186,7 +190,13 @@ export default function Review() {
                     <td className="px-4 py-2.5 font-semibold text-t0" dir="rtl">{it.raw_brand || <span className="text-t2">(blank)</span>}</td>
                     <td className="px-4 py-2.5 text-right font-bold tabular-nums text-t0">{fmt(it.volume)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-t1">{fmt(it.rows)}</td>
-                    <td className="px-4 py-2.5 text-right"><Button size="sm" variant="secondary" disabled={busy} onClick={() => setResolveFor(it)}>Resolve…</Button></td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex justify-end gap-1.5">
+                        <Button size="sm" variant="secondary" disabled={busy} onClick={() => setResolveFor(it)}>Resolve…</Button>
+                        <Button size="sm" variant="danger" disabled={busy} title="Volume is out of scope — exclude from the measures"
+                          onClick={() => setExcludeBrandFor(it)}>Not needed</Button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -200,6 +210,8 @@ export default function Review() {
         onSubmit={(body) => { const it = newModelFor; setNewModelFor(null); act(() => api.newModelForReview(it.alias_id, body), (r) => `Created model, re-derived ${fmt(r.facts_rederived)} facts.`) }} />
       <MergeModal item={mergeFor} onClose={() => setMergeFor(null)}
         onSubmit={(modelID: number) => { const it = mergeFor; setMergeFor(null); mergeInto(it, modelID) }} />
+      <ExcludeBrandModal item={excludeBrandFor} onClose={() => setExcludeBrandFor(null)}
+        onSubmit={(reason: string) => { const it = excludeBrandFor; setExcludeBrandFor(null); excludeBrand(it, reason) }} />
       <ExcludeModal item={excludeFor} onClose={() => setExcludeFor(null)}
         onSubmit={(reason: string) => { const it = excludeFor; setExcludeFor(null); exclude(it, reason) }} />
       <BrandResolveModal item={resolveFor} brands={brands} onClose={() => setResolveFor(null)}
@@ -277,6 +289,33 @@ function ExcludeModal({ item, onClose, onSubmit }: any) {
       <Field label="Reason (optional)">
         <input className={field} value={reason} onChange={(e) => setReason(e.target.value)}
           placeholder="e.g. agricultural vehicle, not a car" autoFocus />
+      </Field>
+    </Modal>
+  )
+}
+
+// The brand-queue twin of ExcludeModal. The raw brand has no brand_id, so its
+// volume currently reports as 'Unknown' everywhere; excluding takes it out of the
+// measures entirely while keeping the rows on record.
+function ExcludeBrandModal({ item, onClose, onSubmit }: any) {
+  const [reason, setReason] = useState('')
+  useEffect(() => { if (item) setReason('') }, [item])
+  if (!item) return null
+  return (
+    <Modal open={!!item} onClose={onClose} title="Exclude this brand's volume"
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="danger" onClick={() => onSubmit(reason)}>Exclude {fmt(item.volume)} units</Button></>}>
+      <p className="mb-3 text-[12.5px] text-t1">
+        Raw brand: <span dir="rtl" className="font-semibold text-t0">{item.raw_brand || '(blank)'}</span>
+      </p>
+      <p className="mb-3 text-[12.5px] text-t1">
+        These {fmt(item.volume)} units across {fmt(item.rows)} rows leave every share, growth and rank figure.
+        Nothing is deleted — the rows stay on record so period totals still reconcile against the authority.
+        If a later import brings new volume under this same raw string it will return to the queue.
+      </p>
+      <Field label="Reason (optional)">
+        <input className={field} value={reason} onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. motorcycle brand, not a car" autoFocus />
       </Field>
     </Modal>
   )
