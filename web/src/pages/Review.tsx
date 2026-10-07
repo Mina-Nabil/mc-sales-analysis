@@ -12,6 +12,7 @@ export default function Review() {
   const [brands, setBrands] = useState<any[]>([])
   const [segments, setSegments] = useState<any[]>([])
   const [sel, setSel] = useState(0)
+  const [q, setQ] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [minConf, setMinConf] = useState('0.95')
@@ -27,6 +28,15 @@ export default function Review() {
   }, [tab]) // eslint-disable-line
   useEffect(() => { load().catch((e) => setMsg(e.message)) }, [load])
   useEffect(() => { api.segments().then(setSegments).catch(() => {}) }, [])
+
+  // Brand filter for the model queue. Everything keyboard-driven indexes THIS
+  // list, not `items` — otherwise J/K would move the highlight through rows the
+  // filter is hiding and Enter would decide on the wrong one.
+  const shown = q.trim()
+    ? items.filter((it) => (it.brand || '').toLowerCase().includes(q.trim().toLowerCase()))
+    : items
+  // A narrower filter can leave the cursor past the end of the list.
+  useEffect(() => { if (sel > shown.length - 1) setSel(0) }, [shown.length]) // eslint-disable-line
 
   const act = useCallback(async (fn: () => Promise<any>, ok: string | ((r: any) => string)) => {
     setBusy(true); setMsg('')
@@ -59,17 +69,17 @@ export default function Review() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT' || newModelFor || resolveFor || mergeFor || excludeFor || tab !== 'models') return
-      if (e.key === 'j') setSel((s) => Math.min(s + 1, items.length - 1))
+      if (e.key === 'j') setSel((s) => Math.min(s + 1, shown.length - 1))
       else if (e.key === 'k') setSel((s) => Math.max(s - 1, 0))
-      else if (e.key === 'Enter') confirm(items[sel])
-      else if (e.key === 'm') items[sel] && setMergeFor(items[sel])
-      else if (e.key === 'r') reject(items[sel])
-      else if (e.key === 'n') items[sel] && setNewModelFor(items[sel])
-      else if (e.key === 'x') items[sel] && setExcludeFor(items[sel])
+      else if (e.key === 'Enter') confirm(shown[sel])
+      else if (e.key === 'm') shown[sel] && setMergeFor(shown[sel])
+      else if (e.key === 'r') reject(shown[sel])
+      else if (e.key === 'n') shown[sel] && setNewModelFor(shown[sel])
+      else if (e.key === 'x') shown[sel] && setExcludeFor(shown[sel])
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items, sel, newModelFor, resolveFor, mergeFor, excludeFor, tab]) // eslint-disable-line
+  }, [items, q, sel, newModelFor, resolveFor, mergeFor, excludeFor, tab]) // eslint-disable-line
   useEffect(() => { rowsRef.current[sel]?.scrollIntoView({ block: 'nearest' }) }, [sel])
 
   return (
@@ -102,6 +112,18 @@ export default function Review() {
 
       {tab === 'models' ? (
         <Card padding="none" className="overflow-hidden">
+          <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
+            <input placeholder="Search brands…" value={q} onChange={(e) => setQ(e.target.value)}
+              className={field + ' max-w-[260px]'} />
+            {q.trim() && (
+              <>
+                <span className="text-[12px] text-t1">
+                  {fmt(shown.length)} of {fmt(items.length)} items · {fmt(shown.reduce((n, it) => n + (it.volume || 0), 0))} units
+                </span>
+                <button className="text-[12px] font-semibold text-acc hover:underline" onClick={() => setQ('')}>Clear</button>
+              </>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] border-collapse text-sm">
               <thead><tr className="border-b border-line">
@@ -110,7 +132,7 @@ export default function Review() {
                 ))}
               </tr></thead>
               <tbody>
-                {items.map((it, i) => (
+                {shown.map((it, i) => (
                   <tr key={it.alias_id} ref={(el) => { rowsRef.current[i] = el }} onClick={() => setSel(i)}
                     className={'border-b border-line last:border-0 cursor-pointer ' + (i === sel ? 'bg-acc-soft' : 'hover:bg-bg-3')}>
                     <td className="px-4 py-2.5 font-semibold text-t0">{it.brand}</td>
@@ -141,7 +163,13 @@ export default function Review() {
               </tbody>
             </table>
           </div>
-          {items.length === 0 && <div className="p-10 text-center text-sm text-t1">Model queue is empty. 🎉</div>}
+          {shown.length === 0 && (
+            <div className="p-10 text-center text-sm text-t1">
+              {items.length === 0
+                ? 'Model queue is empty. 🎉'
+                : `No queue items for a brand matching “${q.trim()}”.`}
+            </div>
+          )}
         </Card>
       ) : (
         <Card padding="none" className="overflow-hidden">
