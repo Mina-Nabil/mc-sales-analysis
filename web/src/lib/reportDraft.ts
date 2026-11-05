@@ -22,6 +22,8 @@ export type ReportDraft = {
   builtins: boolean
 }
 
+export type DraftPatch = Partial<ReportDraft> | ((prev: ReportDraft) => Partial<ReportDraft>)
+
 const DEFAULT_CROSS: CrossSpec = { dim1: 'model', dim2: 'model_year' }
 
 function asCross(c: any): CrossSpec {

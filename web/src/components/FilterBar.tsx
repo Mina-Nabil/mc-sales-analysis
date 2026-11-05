@@ -98,10 +98,17 @@ export function FilterEditor({
   }
 
   useEffect(() => {
-    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null) }
+    const onClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        // A dim picker commits itself on outside click (so Continue still
+        // keeps the ticks). Only the "+ Filter" menu closes from here.
+        if (open && open !== '__add__') return
+        setOpen(null)
+      }
+    }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
-  }, [])
+  }, [open])
 
   return (
     <div className="relative flex flex-wrap items-center gap-2" ref={ref}>
@@ -155,15 +162,30 @@ export function FilterBar({ mode = 'include' }: { mode?: FilterMode }) {
 }
 
 export function ValuePicker({ dim, selected, onApply, onClose }: { dim: string; selected: string[]; onApply: (v: string[]) => void; onClose: () => void }) {
+  const boxRef = useRef<HTMLDivElement>(null)
   const [opts, setOpts] = useState<string[] | null>(null)
   const [q, setQ] = useState('')
   const [sel, setSel] = useState<string[]>(selected)
+  const selRef = useRef(sel)
+  selRef.current = sel
   useEffect(() => { api.values(dim).then(setOpts).catch(() => setOpts([])) }, [dim])
+  // Commit ticks on outside click (Continue, the next step, clicking away)
+  // instead of discarding them — the previous close-without-apply dropped
+  // wizard data-source filters the moment the user moved on.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) onApply(selRef.current)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [onApply])
   const shown = (opts || []).filter((o) => o.toLowerCase().includes(q.toLowerCase())).slice(0, 200)
   const toggle = (v: string) => setSel((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v]))
+  const apply = () => onApply(sel)
   return (
-    <div className="absolute left-0 top-full z-50 mt-2 w-[280px] rounded-[var(--radius-vela-md)] border border-line bg-bg-2 p-2.5 shadow-[var(--shadow-vela)]">
+    <div ref={boxRef} className="absolute left-0 top-full z-50 mt-2 w-[280px] rounded-[var(--radius-vela-md)] border border-line bg-bg-2 p-2.5 shadow-[var(--shadow-vela)]">
       <input autoFocus placeholder={`Search ${dimLabel(dim).toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); apply() } }}
         className="mb-2 h-8 w-full rounded-[var(--radius-vela-sm)] border border-line bg-bg-inset px-2.5 text-[13px] text-t0" />
       <div className="max-h-[240px] overflow-y-auto">
         {opts === null && <div className="p-3 text-center text-[12px] text-t2">Loading…</div>}
@@ -179,7 +201,7 @@ export function ValuePicker({ dim, selected, onApply, onClose }: { dim: string; 
         <button type="button" onClick={() => setSel([])} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear</button>
         <div className="flex gap-2">
           <button type="button" onClick={onClose} className="rounded-[8px] px-2.5 py-1 text-[12px] font-semibold text-t1 hover:bg-bg-3">Cancel</button>
-          <button type="button" onClick={() => onApply(sel)} className="rounded-[8px] bg-acc px-3 py-1 text-[12px] font-bold text-white">Apply</button>
+          <button type="button" onClick={apply} className="rounded-[8px] bg-acc px-3 py-1 text-[12px] font-bold text-white">Apply</button>
         </div>
       </div>
     </div>

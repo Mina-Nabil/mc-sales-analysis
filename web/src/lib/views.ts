@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from './api'
 
 /** One 2-dimension table: rows are (dim1, dim2) pairs across the months.
- *  `values2` pins which dimension-2 values get a row; empty = top 4 + Others. */
+ *  `values2` pins which dimension-2 values get a row; empty = top 4 per
+ *  dimension-1 group + Others. */
 export type CrossSpec = { dim1: string; dim2: string; values2?: string[] }
 
 // Analytics view: a set of dynamic charts + the filter/year context.

@@ -15,6 +15,7 @@ import {
   prevStep,
   saveReportDraft,
   wizardPath,
+  type DraftPatch,
   type ReportDraft,
   type WizardStep,
 } from '@/lib/reportDraft'
@@ -46,6 +47,8 @@ export default function ReportWizard() {
   })
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
+  const draftRef = useRef<ReportDraft | null>(null)
+  draftRef.current = draft
   const [saveErr, setSaveErr] = useState('')
   const [emptyAck, setEmptyAck] = useState(false)
 
@@ -59,16 +62,15 @@ export default function ReportWizard() {
     setDraftState(d)
   }, [draft, viewId, isEdit, loaded, view])
 
-  const setDraft = (patch: Partial<ReportDraft>) => {
+  const setDraft = (patch: DraftPatch) => {
     setDraftState((prev) => {
       if (!prev) return prev
-      const next = { ...prev, ...patch }
+      const p = typeof patch === 'function' ? patch(prev) : patch
+      const next = { ...prev, ...p }
+      draftRef.current = next
       saveReportDraft(viewId, next)
       return next
     })
-    if (patch.tables || patch.bars || patch.pies || patch.crosses || patch.builtins !== undefined) {
-      setEmptyAck(false)
-    }
   }
 
   if (step == null) return <Navigate to={wizardPath(viewId, 'name')} replace />
@@ -112,7 +114,7 @@ export default function ReportWizard() {
     setSaving(true)
     setSaveErr('')
     try {
-      const cfg = configFromDraft(draft)
+      const cfg = configFromDraft(draftRef.current || draft)
       if (viewId != null) {
         await saveConfig(viewId, cfg, draft.name.trim())
         clearReportDraft(viewId)

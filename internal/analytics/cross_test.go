@@ -68,10 +68,26 @@ func TestCrossReconcilesWithTheFilteredTotal(t *testing.T) {
 			if monthSum != res.Grand {
 				t.Errorf("month totals sum to %d, grand is %d", monthSum, res.Grand)
 			}
-			// Dimension 2 must be trimmed to the requested top-N plus "Others";
-			// dimension 1 keeps every value it has.
-			if len(res.Values2) > 5 {
-				t.Errorf("dimension 2 has %d rows, want at most top-4 + Others", len(res.Values2))
+			// Each dimension-1 group keeps at most top-4 named dim2 values plus
+			// "Others". (Dim2 keys are per-group, so the global Values2 union
+			// can be larger than 5.)
+			by1 := map[string][]string{}
+			for _, row := range res.Rows {
+				by1[row.Key1] = append(by1[row.Key1], row.Key2)
+			}
+			for k1, k2s := range by1 {
+				named := 0
+				for _, k2 := range k2s {
+					if k2 != othersKey {
+						named++
+					}
+				}
+				if named > 4 {
+					t.Errorf("group %q has %d named dim2 rows, want at most 4", k1, named)
+				}
+				if len(k2s) > 5 {
+					t.Errorf("group %q has %d dim2 rows, want at most 4 + Others", k1, len(k2s))
+				}
 			}
 			groups := map[string]bool{}
 			for _, row := range res.Rows {

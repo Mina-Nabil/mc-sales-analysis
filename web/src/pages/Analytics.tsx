@@ -616,8 +616,9 @@ function TableCard({ dimension, label, year, yearNote, filterQs, ready, onRemove
 //   Model | Model year | Jan | Feb | … | Total
 //
 // Dimension 1 groups the rows (every value it has, spanned down the first
-// column); dimension 2 is the nested breakdown — top 4 by volume plus "Others"
-// until the user pins their own values, so the group totals always reconcile.
+// column); dimension 2 is the nested breakdown — that group's top 4 by volume
+// plus "Others" until the user pins their own values, so the group totals
+// always reconcile.
 function CrossCard({ spec, year, yearNote, filterQs, ready, onPatch, onRemove }: {
   spec: CrossSpec; year: number; yearNote: string; filterQs: string; ready: boolean
   onPatch: (patch: Partial<CrossSpec>) => void; onRemove: () => void

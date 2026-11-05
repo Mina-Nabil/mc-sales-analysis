@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui'
 import { FilterEditor } from '@/components/FilterBar'
-import { setFilterMap, type ReportDraft } from '@/lib/reportDraft'
+import { setFilterMap, type DraftPatch, type ReportDraft } from '@/lib/reportDraft'
 import { api } from '@/lib/api'
 import { ScopeUnits } from './ScopeUnits'
 
@@ -12,7 +12,7 @@ export function StepSource({
   onPatch,
 }: {
   draft: ReportDraft
-  onPatch: (p: Partial<ReportDraft>) => void
+  onPatch: (p: DraftPatch) => void
 }) {
   const [years, setYears] = useState<number[]>([])
   useEffect(() => { api.years().then(setYears).catch(() => {}) }, [])
@@ -32,7 +32,7 @@ export function StepSource({
         <FilterEditor
           mode="include"
           values={draft.filters}
-          onChange={(dim, vals) => onPatch({ filters: setFilterMap(draft.filters, dim, vals) })}
+          onChange={(dim, vals) => onPatch((d) => ({ filters: setFilterMap(d.filters, dim, vals) }))}
           onClearAll={() => onPatch({ filters: {} })}
         />
       </Card>

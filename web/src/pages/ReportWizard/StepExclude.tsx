@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui'
 import { FilterEditor, dimLabel } from '@/components/FilterBar'
-import { hasCards, setFilterMap, type ReportDraft } from '@/lib/reportDraft'
+import { hasCards, setFilterMap, type DraftPatch, type ReportDraft } from '@/lib/reportDraft'
 import { ScopeUnits } from './ScopeUnits'
 
 function countMap(m: Record<string, string[]>) {
@@ -12,7 +12,7 @@ export function StepExclude({
   onPatch,
 }: {
   draft: ReportDraft
-  onPatch: (p: Partial<ReportDraft>) => void
+  onPatch: (p: DraftPatch) => void
 }) {
   const filterN = countMap(draft.filters)
   const excludeN = countMap(draft.excludes)
@@ -25,7 +25,7 @@ export function StepExclude({
         <FilterEditor
           mode="exclude"
           values={draft.excludes}
-          onChange={(dim, vals) => onPatch({ excludes: setFilterMap(draft.excludes, dim, vals) })}
+          onChange={(dim, vals) => onPatch((d) => ({ excludes: setFilterMap(d.excludes, dim, vals) }))}
           onClearAll={() => onPatch({ excludes: {} })}
         />
       </Card>

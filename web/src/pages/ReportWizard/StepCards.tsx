@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Card, Switch } from '@/components/ui'
 import { DIM_GROUPS, ValuePicker, dimLabel } from '@/components/FilterBar'
-import { hasCards, type ReportDraft } from '@/lib/reportDraft'
+import { hasCards, type DraftPatch, type ReportDraft } from '@/lib/reportDraft'
 import type { CrossSpec } from '@/lib/views'
 
 const DEFAULT_CROSS: CrossSpec = { dim1: 'model', dim2: 'model_year' }
@@ -22,7 +22,7 @@ export function StepCards({
   warnEmpty,
 }: {
   draft: ReportDraft
-  onPatch: (p: Partial<ReportDraft>) => void
+  onPatch: (p: DraftPatch) => void
   warnEmpty: boolean
 }) {
   const [kind, setKind] = useState<CardKind | null>(null)
@@ -40,13 +40,15 @@ export function StepCards({
   const addDim = (k: CardKind, dim: string) => {
     if (k === 'cross') return
     const key = k === 'table' ? 'tables' : k === 'bar' ? 'bars' : 'pies'
-    const cur = draft[key]
-    if (cur.includes(dim)) return
-    onPatch({ [key]: [...cur, dim] })
+    onPatch((d) => {
+      const cur = d[key]
+      if (cur.includes(dim)) return {}
+      return { [key]: [...cur, dim] }
+    })
   }
   const addCross = () => {
     if (cross.dim1 === cross.dim2) return
-    onPatch({ crosses: [...draft.crosses, { ...cross, values2: cross.values2?.length ? cross.values2 : undefined }] })
+    onPatch((d) => ({ crosses: [...d.crosses, { ...cross, values2: cross.values2?.length ? cross.values2 : undefined }] }))
     setCross({ ...DEFAULT_CROSS })
     setPicking(false)
   }
