@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, fmt } from '@/lib/api'
-import { Card, CardHeader, CardTitle, CardSubtitle, Badge, Button, Modal, Input } from '@/components/ui'
+import { Card, CardHeader, CardTitle, CardSubtitle, Badge, Button, Modal, Input, EmptyState } from '@/components/ui'
 import { AreaLineChart, BarChart, DonutChart, StackedBarChart } from '@/components/charts'
 import { FilterBar, ValuePicker, useFilters, FILTER_DIMS, PREFIX } from '@/components/FilterBar'
 import { useViews, viewKind, type ViewConfig, type CrossSpec } from '@/lib/views'
@@ -268,18 +268,21 @@ export default function Analytics() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <AddMenu label="＋ Add table" used={tables} onPick={addTable} />
-          <Button variant="secondary" size="sm" onClick={addCross}>＋ Add 2-dimension table</Button>
-          <AddMenu label="＋ Add bar chart" used={bars} onPick={addBar} />
-          <AddMenu label="＋ Add pie chart" used={pies} onPick={addPie} />
           {viewId != null ? (
             <>
+              <Button variant="secondary" size="sm" onClick={() => navigate(`/analytics/view/${viewId}/edit`)}>Edit report</Button>
               {dirty && <Button variant="primary" size="sm" onClick={saveChanges}>Save changes</Button>}
               {dirty && <Button variant="secondary" size="sm" onClick={() => { setNewName(name); setNameModal(true) }}>Save as new view</Button>}
               <Button variant="outline" size="sm" onClick={deleteView}>Delete view</Button>
             </>
           ) : (
-            <Button variant="primary" size="sm" onClick={() => { setNewName(''); setNameModal(true) }}>Save as new view</Button>
+            <>
+              <AddMenu label="＋ Add table" used={tables} onPick={addTable} />
+              <Button variant="secondary" size="sm" onClick={addCross}>＋ Add 2-dimension table</Button>
+              <AddMenu label="＋ Add bar chart" used={bars} onPick={addBar} />
+              <AddMenu label="＋ Add pie chart" used={pies} onPick={addPie} />
+              <Button variant="primary" size="sm" onClick={() => { setNewName(''); setNameModal(true) }}>Save as new view</Button>
+            </>
           )}
           <label className="flex items-center gap-2 text-[12px] font-semibold text-t1">
             Year
@@ -354,18 +357,12 @@ export default function Analytics() {
         </div>
       )}
 
-      {pies.length === 0 && bars.length === 0 && tables.length === 0 && crosses.length === 0 && !builtins && (
-        <Card><div className="flex min-h-[160px] flex-col items-center justify-center gap-3 px-6 py-8 text-center">
-          <p className="text-[13.5px] font-semibold text-t1">This report is empty.</p>
-          {/* The option names are chips, not inline words: as buttons were added
-              they wrapped one-per-line and left stray commas mid-sentence. */}
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            {['＋ Add table', '＋ Add 2-dimension table', '＋ Add bar chart', '＋ Add pie chart'].map((t) => (
-              <span key={t} className="rounded-full border border-line bg-bg-inset px-2.5 py-1 text-[12px] font-semibold text-t1">{t}</span>
-            ))}
-          </div>
-          <p className="text-[12.5px] text-t2">Pick one above to add a breakdown.</p>
-        </div></Card>
+      {viewId != null && pies.length === 0 && bars.length === 0 && tables.length === 0 && crosses.length === 0 && !builtins && (
+        <EmptyState
+          title="This report has no charts yet"
+          description="Add tables or charts in the editor."
+          action={<Button type="button" onClick={() => navigate(`/analytics/view/${viewId}/edit/cards`)}>Edit report</Button>}
+        />
       )}
 
       {builtins && multiBrand && (

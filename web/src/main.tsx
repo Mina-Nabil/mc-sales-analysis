@@ -7,6 +7,7 @@ import { AppShell } from '@/layout/AppShell'
 import Login from '@/pages/Login'
 import Overview from '@/pages/Overview'
 import Analytics from '@/pages/Analytics'
+import ReportWizard from '@/pages/ReportWizard'
 import ModelAnalytics from '@/pages/ModelAnalytics'
 import Dashboard from '@/pages/Dashboard'
 import Review from '@/pages/Review'
@@ -33,6 +34,10 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/" element={<Protected><AppShell /></Protected>}>
               <Route index element={<Overview />} />
               <Route path="analytics" element={<Analytics />} />
+              <Route path="analytics/new" element={<ReportWizard />} />
+              <Route path="analytics/new/:step" element={<ReportWizard />} />
+              <Route path="analytics/view/:id/edit" element={<ReportWizard />} />
+              <Route path="analytics/view/:id/edit/:step" element={<ReportWizard />} />
               <Route path="analytics/view/:id" element={<Analytics />} />
               <Route path="models" element={<ModelAnalytics />} />
               <Route path="models/view/:id" element={<ModelAnalytics />} />

@@ -1,7 +1,7 @@
-import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/cn'
-import { useViews, viewKind, emptyViewConfig, nextReportName } from '@/lib/views'
+import { useViews, viewKind } from '@/lib/views'
+import { clearReportDraft } from '@/lib/reportDraft'
 
 const NAV: [string, string, string, boolean?][] = [
   ['/', 'Overview', 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z', true],
@@ -24,20 +24,16 @@ const subLinkActive = 'bg-acc-soft text-acc!'
 
 export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   // Carry the active filter query across pages so filters stay global (§5.3).
-  const { search } = useLocation()
-  const { views, create } = useViews()
+  const { search, pathname } = useLocation()
+  const { views } = useViews()
   const navigate = useNavigate()
-  const [creating, setCreating] = useState(false)
-  // New report pages start completely empty — no built-in cards, no charts.
-  const newReport = async () => {
-    if (creating) return
-    setCreating(true)
-    try {
-      const v = await create(nextReportName(views), emptyViewConfig())
-      onNavigate?.()
-      navigate(`/analytics/view/${v.id}`)
-    } catch { /* surfaced by the global loading bar */ }
-    finally { setCreating(false) }
+  const onNew = pathname.startsWith('/analytics/new')
+  const newReport = () => {
+    // Already in the wizard: keep the draft and jump to step 0. From anywhere
+    // else, start a blank report so an abandoned session doesn't come back.
+    if (!onNew) clearReportDraft(null)
+    onNavigate?.()
+    navigate('/analytics/new')
   }
   const carried = new URLSearchParams(search)
   for (const k of [...carried.keys()]) if (!k.startsWith('filter.') && !k.startsWith('exclude.')) carried.delete(k)
@@ -98,9 +94,9 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                     </NavLink>
                   ))}
                   {isReports && (
-                    <button type="button" onClick={newReport} disabled={creating}
-                      className={cn(subLink, 'w-full text-left text-t2 hover:text-acc disabled:opacity-60')}>
-                      ＋ Empty New Report
+                    <button type="button" onClick={newReport}
+                      className={cn(subLink, 'w-full text-left', onNew ? subLinkActive : 'text-t2 hover:text-acc')}>
+                      ＋ New Report
                     </button>
                   )}
                 </div>

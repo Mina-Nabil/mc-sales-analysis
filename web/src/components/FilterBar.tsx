@@ -8,12 +8,33 @@ export const FILTER_DIMS: [string, string][] = [
   ['distributor', 'Distributor'], ['region', 'Region'], ['governorate', 'Governorate'], ['traffic_unit', 'Traffic unit'],
   ['model_year', 'Model year'],
 ]
-const labelOf = (k: string) => FILTER_DIMS.find((d) => d[0] === k)?.[1] || k
+
+/** Dimension picker grouped by the spec's owner (brand / model / fact). */
+export const DIM_GROUPS: [string, string[]][] = [
+  ['Brand', ['brand', 'origin', 'distributor']],
+  ['Model', ['model', 'segment', 'car_type', 'engine', 'supply']],
+  ['Facts', ['governorate', 'traffic_unit', 'region', 'model_year']],
+]
+
+export const dimLabel = (k: string) => FILTER_DIMS.find((d) => d[0] === k)?.[1] || k
 
 /** Filter rows: what to keep, and what to leave out. */
 export type FilterMode = 'include' | 'exclude'
 /** URL key prefix per row — `filter.brand=…` keeps, `exclude.brand=…` drops. */
 export const PREFIX: Record<FilterMode, string> = { include: 'filter.', exclude: 'exclude.' }
+
+/** Build the analytics query string from include/exclude maps (and optional year). */
+export function buildFilterQs(
+  filters: Record<string, string[]> = {},
+  excludes: Record<string, string[]> = {},
+  year?: string,
+) {
+  const p = new URLSearchParams()
+  for (const d in filters) if (filters[d]?.length) p.set(PREFIX.include + d, filters[d].join(','))
+  for (const d in excludes) if (excludes[d]?.length) p.set(PREFIX.exclude + d, excludes[d].join(','))
+  if (year && year !== 'all') p.set('year', year)
+  return p.toString()
+}
 
 /** Global filter state, stored in the URL so any view is shareable. */
 export function useFilters() {
@@ -50,19 +71,31 @@ export function useFilters() {
   return { filters, excludes, setFilter, clearAll, qs }
 }
 
-export function FilterBar({ mode = 'include' }: { mode?: FilterMode }) {
-  const { filters, excludes, setFilter, clearAll } = useFilters()
+/** Controlled chip row — wizard steps pass local state; FilterBar wraps the URL store. */
+export function FilterEditor({
+  mode = 'include',
+  values,
+  onChange,
+  onClearAll,
+}: {
+  mode?: FilterMode
+  values: Record<string, string[]>
+  onChange: (dim: string, values: string[]) => void
+  onClearAll?: () => void
+}) {
   const [open, setOpen] = useState<string | null>(null) // null | '__add__' | dim
   const ref = useRef<HTMLDivElement>(null)
   const isExclude = mode === 'exclude'
-  const current = isExclude ? excludes : filters
-  const active = Object.keys(current)
-  const set = (dim: string, vals: string[]) => setFilter(dim, vals, mode)
-  // Exclusions read as a warning, so they wear the danger token in both themes.
+  const active = Object.keys(values).filter((d) => values[d]?.length)
   const chip = isExclude
     ? 'border-bad/40 bg-bad-soft text-bad'
     : 'border-acc/40 bg-acc-soft text-acc'
   const xCls = isExclude ? 'text-bad/70 hover:text-bad' : 'text-acc/70 hover:text-acc'
+  const clear = () => {
+    if (onClearAll) onClearAll()
+    else active.forEach((d) => onChange(d, []))
+    setOpen(null)
+  }
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null) }
@@ -77,31 +110,47 @@ export function FilterBar({ mode = 'include' }: { mode?: FilterMode }) {
         {isExclude ? 'Exclude data from:' : 'Include data from:'}
       </span>
       {active.map((dim) => (
-        <button key={dim} onClick={() => setOpen(open === dim ? null : dim)}
+        <button key={dim} type="button" onClick={() => setOpen(open === dim ? null : dim)}
           className={'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[12px] font-semibold ' + chip}>
-          {labelOf(dim)}: {current[dim].length > 2 ? `${current[dim].length} selected` : current[dim].join(', ')}
-          <span onClick={(e) => { e.stopPropagation(); set(dim, []) }} className={xCls}>✕</span>
+          {dimLabel(dim)}: {values[dim].length > 2 ? `${values[dim].length} selected` : values[dim].join(', ')}
+          <span onClick={(e) => { e.stopPropagation(); onChange(dim, []) }} className={xCls}>✕</span>
         </button>
       ))}
-      <button onClick={() => setOpen(open === '__add__' ? null : '__add__')}
+      <button type="button" onClick={() => setOpen(open === '__add__' ? null : '__add__')}
         className={'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-semibold hover:bg-bg-3 ' +
           (isExclude ? 'border-bad/40 bg-bad-soft text-bad' : 'border-line bg-bg-inset text-t1')}>
         ＋ {isExclude ? 'Exclusion' : 'Filter'}
       </button>
-      {active.length > 0 && <button onClick={() => clearAll(mode)} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear all</button>}
+      {active.length > 0 && (
+        <button type="button" onClick={clear} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear all</button>
+      )}
 
       {open === '__add__' && (
         <div className="absolute left-0 top-full z-50 mt-2 grid w-[320px] grid-cols-2 gap-1 rounded-[var(--radius-vela-md)] border border-line bg-bg-2 p-2 shadow-[var(--shadow-vela)]">
           {FILTER_DIMS.map(([k, label]) => (
-            <button key={k} onClick={() => setOpen(k)}
+            <button key={k} type="button" onClick={() => setOpen(k)}
               className="rounded-[9px] px-2.5 py-1.5 text-left text-[13px] text-t1 hover:bg-bg-3 hover:text-t0">{label}</button>
           ))}
         </div>
       )}
       {open && open !== '__add__' && (
-        <ValuePicker dim={open} selected={current[open] || []} onApply={(vals) => { set(open, vals); setOpen(null) }} onClose={() => setOpen(null)} />
+        <ValuePicker dim={open} selected={values[open] || []} onApply={(vals) => { onChange(open, vals); setOpen(null) }} onClose={() => setOpen(null)} />
       )}
     </div>
+  )
+}
+
+/** URL-backed filter row used by the live Analytics / Dashboard pages. */
+export function FilterBar({ mode = 'include' }: { mode?: FilterMode }) {
+  const { filters, excludes, setFilter, clearAll } = useFilters()
+  const values = mode === 'exclude' ? excludes : filters
+  return (
+    <FilterEditor
+      mode={mode}
+      values={values}
+      onChange={(dim, vals) => setFilter(dim, vals, mode)}
+      onClearAll={() => clearAll(mode)}
+    />
   )
 }
 
@@ -111,10 +160,10 @@ export function ValuePicker({ dim, selected, onApply, onClose }: { dim: string; 
   const [sel, setSel] = useState<string[]>(selected)
   useEffect(() => { api.values(dim).then(setOpts).catch(() => setOpts([])) }, [dim])
   const shown = (opts || []).filter((o) => o.toLowerCase().includes(q.toLowerCase())).slice(0, 200)
-  const toggle = (v: string) => setSel((s) => s.includes(v) ? s.filter((x) => x !== v) : [...s, v])
+  const toggle = (v: string) => setSel((s) => (s.includes(v) ? s.filter((x) => x !== v) : [...s, v]))
   return (
     <div className="absolute left-0 top-full z-50 mt-2 w-[280px] rounded-[var(--radius-vela-md)] border border-line bg-bg-2 p-2.5 shadow-[var(--shadow-vela)]">
-      <input autoFocus placeholder={`Search ${labelOf(dim).toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)}
+      <input autoFocus placeholder={`Search ${dimLabel(dim).toLowerCase()}…`} value={q} onChange={(e) => setQ(e.target.value)}
         className="mb-2 h-8 w-full rounded-[var(--radius-vela-sm)] border border-line bg-bg-inset px-2.5 text-[13px] text-t0" />
       <div className="max-h-[240px] overflow-y-auto">
         {opts === null && <div className="p-3 text-center text-[12px] text-t2">Loading…</div>}
@@ -127,10 +176,10 @@ export function ValuePicker({ dim, selected, onApply, onClose }: { dim: string; 
         {opts && shown.length === 0 && <div className="p-3 text-center text-[12px] text-t2">No matches</div>}
       </div>
       <div className="mt-2 flex items-center justify-between border-t border-line pt-2">
-        <button onClick={() => setSel([])} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear</button>
+        <button type="button" onClick={() => setSel([])} className="text-[12px] font-semibold text-t2 hover:text-t0">Clear</button>
         <div className="flex gap-2">
-          <button onClick={onClose} className="rounded-[8px] px-2.5 py-1 text-[12px] font-semibold text-t1 hover:bg-bg-3">Cancel</button>
-          <button onClick={() => onApply(sel)} className="rounded-[8px] bg-acc px-3 py-1 text-[12px] font-bold text-white">Apply</button>
+          <button type="button" onClick={onClose} className="rounded-[8px] px-2.5 py-1 text-[12px] font-semibold text-t1 hover:bg-bg-3">Cancel</button>
+          <button type="button" onClick={() => onApply(sel)} className="rounded-[8px] bg-acc px-3 py-1 text-[12px] font-bold text-white">Apply</button>
         </div>
       </div>
     </div>
